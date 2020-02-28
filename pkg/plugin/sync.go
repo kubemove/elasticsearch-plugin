@@ -39,7 +39,7 @@ func (d *ElasticsearchDDM) Sync(params map[string]string, vol []*framework.Volum
 // triggerSnapshot hits the Snapshot API of Elasticsearch to trigger a snapshot
 func triggerSnapshot(k8sClient kubernetes.Interface, params PluginParameters, snapshotName string) (string, error) {
 	// crate an Elasticsearch client
-	esClient, err := newElasticsearchClient(k8sClient, params.Elasticsearch)
+	esClient, err := NewElasticsearchClient(k8sClient, params.Elasticsearch)
 	if err != nil {
 		return "", err
 	}
@@ -71,7 +71,7 @@ func triggerSnapshot(k8sClient kubernetes.Interface, params PluginParameters, sn
 // triggerRestore hits the Recovery API of Elasticsearch to trigger a restore process
 func triggerRestore(k8sClient kubernetes.Interface, params PluginParameters, snapshotName string) (string, error) {
 	// crate an Elasticsearch client
-	esClient, err := newElasticsearchClient(k8sClient, params.Elasticsearch)
+	esClient, err := NewElasticsearchClient(k8sClient, params.Elasticsearch)
 	if err != nil {
 		return "", err
 	}

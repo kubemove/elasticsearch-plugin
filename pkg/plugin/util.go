@@ -66,7 +66,7 @@ type ElasticsearchOptions struct {
 
 var _ framework.Plugin = (*ElasticsearchDDM)(nil)
 
-func newElasticsearchClient(k8sClient kubernetes.Interface, opt ElasticsearchOptions) (*es.Client, error) {
+func NewElasticsearchClient(k8sClient kubernetes.Interface, opt ElasticsearchOptions) (*es.Client, error) {
 	// configure client
 	cfg := es.Config{
 		Addresses: []string{fmt.Sprintf("%s://%s:%d", opt.Scheme, opt.ServiceName, opt.Port)},

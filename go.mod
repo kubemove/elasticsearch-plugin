@@ -10,6 +10,7 @@ require (
 	github.com/kubemove/kubemove v0.0.0-00010101000000-000000000000
 	github.com/onsi/ginkgo v1.12.0
 	github.com/onsi/gomega v1.9.0
+	github.com/spf13/cobra v0.0.5
 	google.golang.org/grpc v1.27.1
 	k8s.io/api v0.17.3
 	k8s.io/apimachinery v0.17.3

@@ -69,7 +69,7 @@ func (d *ElasticsearchDDM) Status(params map[string]string) (int32, error) {
 // retrieveSnapshotState hits the Snapshot API of Elasticsearch to retrieve the backup status of a Snapshot
 func retrieveBackupState(k8sClient kubernetes.Interface, params PluginParameters, snapshotName string) (int32, error) {
 	// crate an Elasticsearch client
-	esClient, err := newElasticsearchClient(k8sClient, params.Elasticsearch)
+	esClient, err := NewElasticsearchClient(k8sClient, params.Elasticsearch)
 	if err != nil {
 		return framework.Errored, err
 	}
@@ -127,7 +127,7 @@ func retrieveBackupState(k8sClient kubernetes.Interface, params PluginParameters
 // retrieveRestoreState hits the Recovery API of Elasticsearch to retrieve the restore status of a ES.
 func retrieveRestoreState(k8sClient kubernetes.Interface, params PluginParameters, snapshotName string) (int32, error) {
 	// crate an Elasticsearch client
-	esClient, err := newElasticsearchClient(k8sClient, params.Elasticsearch)
+	esClient, err := NewElasticsearchClient(k8sClient, params.Elasticsearch)
 	if err != nil {
 		return framework.Errored, err
 	}

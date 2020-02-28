@@ -137,26 +137,125 @@ plugin-image: build
 .PHONY: update-crds
 update-crds:
 
+# Testing related Environments
+KUBECONFIG_PATH?=$(echo $HOME)/.kube/kind-config-kind
+SRC_CONTEXT?=kind-src-cluster
+DST_CONTEXT?=kind-dst-cluster
+
+SRC_CLUSTER_IP?=172.17.0.2
+DST_CLUSTER_IP?=172.17.0.3
+
+MINIO_SERVER_ADDRESS?=
+
+SRC_ES_NODE_PORT?=
+DST_ES_NODE_PORT?=
+
+# Install all dependencies for testing
+# Example: make prepare REGISTRY=<your docker registry> KUBECONFIG_PATH=<kubeconfig path> SRC_CONTEXT=<source context> DST_CONTEXT=<destination context>
 .PHONY: prepare
 prepare:
+	@echo "Installing ECK operator in the source cluster"
+	@kubectl apply -f https://download.elastic.co/downloads/eck/1.0.1/all-in-one.yaml --context=$(SRC_CONTEXT)
+	@echo "Installing ECK operator in the destination cluster"
+	@kubectl apply -f https://download.elastic.co/downloads/eck/1.0.1/all-in-one.yaml --context=$(DST_CONTEXT)
+	@echo ""
+	@echo "Registering Kubemove CRDs in the source cluster"
+	@kubectl apply -f deploy/dependencies/crds/ --context=$(SRC_CONTEXT)
+	@echo "Registering Kubemove CRDs in the destination cluster"
+	@kubectl apply -f deploy/dependencies/crds/ --context=$(DST_CONTEXT)
+	@echo ""
+	@echo "Installing DataSync controller in the source cluster"
+	@kubectl apply -f deploy/dependencies/datasync_controller.yaml --context=$(SRC_CONTEXT)
+	@echo "Installing DataSync controller in the destination cluster"
+	@kubectl apply -f deploy/dependencies/datasync_controller.yaml --context=$(DST_CONTEXT)
+	@echo ""
+	@echo "Installing MoveEngine controller in the source cluster"
+	@kubectl apply -f deploy/dependencies/moveengine_controller.yaml --context=$(SRC_CONTEXT)
+	@echo "Installing MoveEngine controller in the destination cluster"
+	@kubectl apply -f deploy/dependencies/moveengine_controller.yaml --context=$(DST_CONTEXT)
+	@echo ""
+	@echo "Creating Minio Secret in the source cluster"
+	@kubectl apply -f deploy/dependencies/minio_secret.yaml --context=$(SRC_CONTEXT)
+	@echo "Creating Minio Secret in the destination cluster"
+	@kubectl apply -f deploy/dependencies/minio_secret.yaml --context=$(DST_CONTEXT)
+	@echo ""
+	@echo "Deploying Minio Server in the destination cluster"
+	@kubectl apply -f deploy/dependencies/minio_server.yaml --context=$(DST_CONTEXT)
+	@export SRC_CLUSTER_IP=$(kubectl get pods -n kube-system kube-apiserver-$(SRC_CONTEXT)-control-plane -o yaml | grep advertise-address= | cut -c27-)
 
+cluster_ip:
+	@echo $$(kubectl get pods -n kube-system kube-apiserver-dst-cluster-control-plane -o yaml | grep advertise-address= | cut -c27-)
+
+# Install Elasticsearch Plugin in source and destination cluster
+# Example: make install-plugin
 .PHONY: install-plugin
-install-plugin:
+install-plugin: export-envs
+	@echo "Installing Elasticsearch Plugin into the source cluter...."
+	@deploy/plugin.yaml | envsubst | kubectl apply -f -
+	@echo " "
+	@echo "Installing Elasticsearch Plugin into the destination cluter...."
+	@deploy/plugin.yaml | envsubst | kubectl apply -f -
 
+# Deploy Elasticsearch Plugin in source and destination cluster
+# Example: make deploy-es
 .PHONY: deploy-es
 deploy-es:
+	@echo "Deploying sample Easticsearch into the source cluter...."
+	@deploy/elasticsearch.yaml | kubectl apply -f -
+	@echo " "
+	@echo "Deploying sample Easticsearch into the destination cluter...."
+	@deploy/elasticsearch.yaml | kubectl apply -f -
+	#//TODO: Wait for the ES to be ready then export the ES_NODE_PORT_SERVICE
+	export-envs
 
+# Create MoveEngine CR to sync data between two Elasticsearch
+# Example: make stup-sync
 .PHONY: setup-sync
 setup-sync:
+	@echo "Creating MoveEngine CR into the source cluter...."
+	export MODE="active"
+	@deploy/moveengine.yaml | envsubst | kubectl apply -f -
+	@echo " "
+	@echo "Creating MoveEngine CR into the destination cluter...."
+	export MODE="standby"
+	@deploy/moveengine.yaml | envsubst | kubectl apply -f -
 
+# Trigger INIT API
+#Example: make trigger-init
 .PHONY: trigger-init
 trigger-init:
+	@go run test/main.go trigger-init \
+		--kubeconfigpath=$(KUBECONFIG_PATH)  \
+		--src-context=$(SRC_CONTEXT) \
+		--dst-context=$(DST_CONTEXT)
 
+# Trigger SYNC API
+# Example: make trigger-sync
 .PHONY: trigger-sync
 trigger-sync:
+	@go run test/main.go trigger-sync \
+		--kubeconfigpath=$(KUBECONFIG_PATH)  \
+		--src-context=$(SRC_CONTEXT) \
+		--dst-context=$(DST_CONTEXT)
 
+# Insert a index in the source cluster
+# Example: make insert-index INDEX_NAME=my-index
+INDEX_NAME?=test-index
 .PHONY: insert-index
 insert-index:
+	@go run test/main.go insert-index \
+		--kubeconfigpath=$(KUBECONFIG_PATH)  \
+		--src-context=$(SRC_CONTEXT) \
+		--dst-context=$(DST_CONTEXT) \
+		--index-name=$(INDEX_NAME)
 
+# Show all indexes from the targeted ES
+# Example: make show-indexes FROM=active
+FROM?=active
 .PHONY: show-indexes
 show-indexes:
+	@export ENGINE_MODE=$(FROM)
+	@go run test/main.go trigger-sync \
+		--kubeconfigpath=$(KUBECONFIG_PATH)  \
+		--src-context=$(SRC_CONTEXT) \
+		--dst-context=$(DST_CONTEXT)

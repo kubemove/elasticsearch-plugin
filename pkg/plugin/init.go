@@ -40,7 +40,7 @@ func (d *ElasticsearchDDM) Init(params map[string]string) error {
 // registerSnapshotRepository hits Snapshot API of Elasticsearch to register a repository
 func registerSnapshotRepository(k8sClient kubernetes.Interface, params PluginParameters, mode string) error {
 	// crate an Elasticsearch client
-	esClient, err := newElasticsearchClient(k8sClient, params.Elasticsearch)
+	esClient, err := NewElasticsearchClient(k8sClient, params.Elasticsearch)
 	if err != nil {
 		return err
 	}
