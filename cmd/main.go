@@ -4,13 +4,13 @@ import (
 	"fmt"
 
 	"github.com/appscode/go/crypto/rand"
+	"github.com/kubemove/elasticsearch-plugin/pkg/plugin"
 	framework "github.com/kubemove/kubemove/pkg/plugin/ddm/plugin"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
-	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
-	"github.com/kubemove/elasticsearch-plugin/pkg/plugin"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 const (

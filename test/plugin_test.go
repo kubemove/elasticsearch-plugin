@@ -120,6 +120,7 @@ var _ = Describe("ECK Plugin Test", func() {
 			By("Registering Repository in the destination Elasticsearch")
 			initResp, err = dstClient.Init(context.Background(), initParams)
 			Expect(err).NotTo(HaveOccurred())
+			fmt.Println(initResp)
 
 			snapshotName := fmt.Sprintf("snapshot-%d", time.Now().Unix())
 			syncParams := &proto.SyncRequest{

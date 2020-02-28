@@ -80,6 +80,9 @@ func newElasticsearchClient(k8sClient kubernetes.Interface, opt ElasticsearchOpt
 
 	if opt.Scheme == "https" {
 		err = configureTLS(k8sClient, &cfg, opt)
+		if err != nil {
+			return nil, err
+		}
 	} else {
 		cfg.Transport = &http.Transport{
 			TLSClientConfig: &tls.Config{

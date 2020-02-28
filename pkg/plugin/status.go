@@ -66,7 +66,6 @@ func (d *ElasticsearchDDM) Status(params map[string]string) (int32, error) {
 	}
 }
 
-
 // retrieveSnapshotState hits the Snapshot API of Elasticsearch to retrieve the backup status of a Snapshot
 func retrieveBackupState(k8sClient kubernetes.Interface, params PluginParameters, snapshotName string) (int32, error) {
 	// crate an Elasticsearch client
