@@ -1,4 +1,4 @@
-SHELL=/bin/bash -o pipefail
+SHELL:=/bin/bash -o pipefail
 
 REGISTRY?=kubemovedev
 REPO_ROOT:=$(shell pwd)
@@ -123,7 +123,7 @@ build: $(BUILD_DIRS) fmt
 
 # Build plugin image and push in the docker registry
 # Example: make plugin-image REGISTRY=<your docker registry>
-PLUGIN_IMAGE:=$(REGISTRY)/elasticsearch-plugin:$(IMAGE_TAG)
+export PLUGIN_IMAGE:=$(REGISTRY)/elasticsearch-plugin:$(IMAGE_TAG)
 .PHONY: plugin-image
 plugin-image: build
 	@echo ""
@@ -138,17 +138,23 @@ plugin-image: build
 update-crds:
 
 # Testing related Environments
-KUBECONFIG_PATH?=$(echo $HOME)/.kube/kind-config-kind
+KUBECONFIG_PATH?=
 SRC_CONTEXT?=kind-src-cluster
 DST_CONTEXT?=kind-dst-cluster
 
-SRC_CLUSTER_IP?=172.17.0.2
-DST_CLUSTER_IP?=172.17.0.3
-
-MINIO_SERVER_ADDRESS?=
 
 SRC_ES_NODE_PORT?=
 DST_ES_NODE_PORT?=
+
+SRC_CONTROL_PANE:=$(shell /bin/bash -c "kubectl get pod -n kube-system  -o name --context=$(SRC_CONTEXT)| grep kube-apiserver")
+SRC_CLUSTER_IP=$(shell (kubectl get -n kube-system $(SRC_CONTROL_PANE) -o yaml --context=$(SRC_CONTEXT)| grep advertise-address= | cut -c27-))
+DST_CONTROL_PANE:=$(shell /bin/bash -c "kubectl get pod -n kube-system  -o name --context=$(DST_CONTEXT)| grep kube-apiserver")
+DST_CLUSTER_IP=$(shell (kubectl get -n kube-system $(DST_CONTROL_PANE) -o yaml --context=$(DST_CONTEXT)| grep advertise-address= | cut -c27-))
+
+.PHONY: cluster_ip
+cluster_ip:
+	@echo $(SRC_CLUSTER_IP)
+	@echo $(DST_CLUSTER_IP)
 
 # Install all dependencies for testing
 # Example: make prepare REGISTRY=<your docker registry> KUBECONFIG_PATH=<kubeconfig path> SRC_CONTEXT=<source context> DST_CONTEXT=<destination context>
@@ -163,6 +169,11 @@ prepare:
 	@kubectl apply -f deploy/dependencies/crds/ --context=$(SRC_CONTEXT)
 	@echo "Registering Kubemove CRDs in the destination cluster"
 	@kubectl apply -f deploy/dependencies/crds/ --context=$(DST_CONTEXT)
+	@echo ""
+	@echo "Creating RBAC resources in the source cluster"
+	@kubectl apply -f deploy/dependencies/rbac.yaml --context=$(SRC_CONTEXT)
+	@echo "Creating RBAC resources in the destination cluster"
+	@kubectl apply -f deploy/dependencies/rbac.yaml --context=$(DST_CONTEXT)
 	@echo ""
 	@echo "Installing DataSync controller in the source cluster"
 	@kubectl apply -f deploy/dependencies/datasync_controller.yaml --context=$(SRC_CONTEXT)
@@ -181,72 +192,94 @@ prepare:
 	@echo ""
 	@echo "Deploying Minio Server in the destination cluster"
 	@kubectl apply -f deploy/dependencies/minio_server.yaml --context=$(DST_CONTEXT)
-	@export SRC_CLUSTER_IP=$(kubectl get pods -n kube-system kube-apiserver-$(SRC_CONTEXT)-control-plane -o yaml | grep advertise-address= | cut -c27-)
-
-cluster_ip:
-	@echo $$(kubectl get pods -n kube-system kube-apiserver-dst-cluster-control-plane -o yaml | grep advertise-address= | cut -c27-)
 
 # Install Elasticsearch Plugin in source and destination cluster
 # Example: make install-plugin
 .PHONY: install-plugin
-install-plugin: export-envs
-	@echo "Installing Elasticsearch Plugin into the source cluter...."
-	@deploy/plugin.yaml | envsubst | kubectl apply -f -
+install-plugin:
+	@echo "Installing Elasticsearch Plugin into the source cluster...."
+	@cat deploy/plugin.yaml | envsubst | kubectl apply -f - --context=$(SRC_CONTEXT)
 	@echo " "
-	@echo "Installing Elasticsearch Plugin into the destination cluter...."
-	@deploy/plugin.yaml | envsubst | kubectl apply -f -
+	@echo "Installing Elasticsearch Plugin into the destination cluster...."
+	@cat deploy/plugin.yaml | envsubst | kubectl apply -f - --context=$(DST_CONTEXT)
 
 # Deploy Elasticsearch Plugin in source and destination cluster
 # Example: make deploy-es
 .PHONY: deploy-es
 deploy-es:
-	@echo "Deploying sample Easticsearch into the source cluter...."
-	@deploy/elasticsearch.yaml | kubectl apply -f -
+	@echo "Deploying sample Easticsearch into the source cluster...."
+	@cat deploy/elasticsearch.yaml | kubectl apply -f - --context=$(SRC_CONTEXT)
 	@echo " "
-	@echo "Deploying sample Easticsearch into the destination cluter...."
-	@deploy/elasticsearch.yaml | kubectl apply -f -
-	#//TODO: Wait for the ES to be ready then export the ES_NODE_PORT_SERVICE
-	export-envs
+	@echo "Deploying sample Easticsearch into the destination cluster...."
+	@cat deploy/elasticsearch.yaml | kubectl apply -f - --context=$(DST_CONTEXT)
 
 # Create MoveEngine CR to sync data between two Elasticsearch
 # Example: make stup-sync
 .PHONY: setup-sync
 setup-sync:
-	@echo "Creating MoveEngine CR into the source cluter...."
-	export MODE="active"
-	@deploy/moveengine.yaml | envsubst | kubectl apply -f -
+	$(eval MINIO_NODEPORT:=$(shell (kubectl get service minio -o yaml --context=$(DST_CONTEXT) | grep nodePort | cut -c15-)))
+	$(eval MINIO_SERVER_ADDRESS:=$(DST_CLUSTER_IP):$(MINIO_NODEPORT))
+
+	@echo "Creating MoveEngine CR into the source cluster...."
+	@cat deploy/moveengine.yaml | \
+		MODE=active \
+		MINIO_SERVER_ADDRESS=$(MINIO_SERVER_ADDRESS)\
+		envsubst | kubectl apply -f - --context=$(SRC_CONTEXT)
 	@echo " "
-	@echo "Creating MoveEngine CR into the destination cluter...."
-	export MODE="standby"
-	@deploy/moveengine.yaml | envsubst | kubectl apply -f -
+	@echo "Creating MoveEngine CR into the destination cluster...."
+	@cat deploy/moveengine.yaml | \
+    		MODE=standby \
+    		MINIO_SERVER_ADDRESS=$(MINIO_SERVER_ADDRESS)\
+    		envsubst | kubectl apply -f - --context=$(DST_CONTEXT)
 
 # Trigger INIT API
 #Example: make trigger-init
 .PHONY: trigger-init
 trigger-init:
+	$(eval SRC_PLUGIN_NODEPORT:=$(shell (kubectl get service eck-plugin -o yaml --context=$(SRC_CONTEXT) | grep nodePort | cut -c15-)))
+	$(eval SRC_PLUGIN_ADDRESS:=$(SRC_CLUSTER_IP):$(SRC_PLUGIN_NODEPORT))
+	$(eval DST_PLUGIN_NODEPORT:=$(shell (kubectl get service eck-plugin -o yaml --context=$(DST_CONTEXT) | grep nodePort | cut -c15-)))
+	$(eval DST_PLUGIN_ADDRESS:=$(DST_CLUSTER_IP):$(DST_PLUGIN_NODEPORT))
+
 	@go run test/main.go trigger-init \
 		--kubeconfigpath=$(KUBECONFIG_PATH)  \
 		--src-context=$(SRC_CONTEXT) \
-		--dst-context=$(DST_CONTEXT)
+		--dst-context=$(DST_CONTEXT) \
+		--src-plugin=$(SRC_PLUGIN_ADDRESS) \
+		--dst-plugin=$(DST_PLUGIN_ADDRESS)
 
 # Trigger SYNC API
 # Example: make trigger-sync
 .PHONY: trigger-sync
 trigger-sync:
+	$(eval SRC_PLUGIN_NODEPORT:=$(shell (kubectl get service eck-plugin -o yaml --context=$(SRC_CONTEXT) | grep nodePort | cut -c15-)))
+	$(eval SRC_PLUGIN_ADDRESS:=$(SRC_CLUSTER_IP):$(SRC_PLUGIN_NODEPORT))
+	$(eval DST_PLUGIN_NODEPORT:=$(shell (kubectl get service eck-plugin -o yaml --context=$(DST_CONTEXT) | grep nodePort | cut -c15-)))
+	$(eval DST_PLUGIN_ADDRESS:=$(DST_CLUSTER_IP):$(DST_PLUGIN_NODEPORT))
+
 	@go run test/main.go trigger-sync \
 		--kubeconfigpath=$(KUBECONFIG_PATH)  \
 		--src-context=$(SRC_CONTEXT) \
-		--dst-context=$(DST_CONTEXT)
+		--dst-context=$(DST_CONTEXT) \
+		--src-plugin=$(SRC_PLUGIN_ADDRESS) \
+		--dst-plugin=$(DST_PLUGIN_ADDRESS)
 
 # Insert a index in the source cluster
 # Example: make insert-index INDEX_NAME=my-index
 INDEX_NAME?=test-index
 .PHONY: insert-index
 insert-index:
+	$(eval SRC_ES_NODEPORT:=$(shell (kubectl get service sample-es-es-http -o yaml --context=$(SRC_CONTEXT) | grep nodePort | cut -c15-)))
+	$(eval DST_ES_NODEPORT:=$(shell (kubectl get service sample-es-es-http -o yaml --context=$(DST_CONTEXT) | grep nodePort | cut -c15-)))
+
 	@go run test/main.go insert-index \
 		--kubeconfigpath=$(KUBECONFIG_PATH)  \
 		--src-context=$(SRC_CONTEXT) \
 		--dst-context=$(DST_CONTEXT) \
+		--src-cluster-ip=$(SRC_CLUSTER_IP) \
+		--dst-cluster-ip=$(DST_SRC_CLUSTER_IP) \
+		--src-es-nodeport=$(SRC_ES_NODEPORT) \
+		--dst-es-nodeport=$(DST_ES_NODEPORT) \
 		--index-name=$(INDEX_NAME)
 
 # Show all indexes from the targeted ES
@@ -254,8 +287,16 @@ insert-index:
 FROM?=active
 .PHONY: show-indexes
 show-indexes:
-	@export ENGINE_MODE=$(FROM)
-	@go run test/main.go trigger-sync \
+	$(eval SRC_ES_NODEPORT:=$(shell (kubectl get service sample-es-es-http -o yaml --context=$(SRC_CONTEXT) | grep nodePort | cut -c15-)))
+	$(eval DST_ES_NODEPORT:=$(shell (kubectl get service sample-es-es-http -o yaml --context=$(DST_CONTEXT) | grep nodePort | cut -c15-)))
+	$(eval DST_PLUGIN_ADDRESS:=$(DST_CLUSTER_IP):$(DST_PLUGIN_NODEPORT))
+
+	@go run test/main.go show-indexes \
 		--kubeconfigpath=$(KUBECONFIG_PATH)  \
 		--src-context=$(SRC_CONTEXT) \
-		--dst-context=$(DST_CONTEXT)
+		--dst-context=$(DST_CONTEXT) \
+		--src-cluster-ip=$(SRC_CLUSTER_IP) \
+		--dst-cluster-ip=$(DST_CLUSTER_IP) \
+		--src-es-nodeport=$(SRC_ES_NODEPORT) \
+		--dst-es-nodeport=$(DST_ES_NODEPORT) \
+		--index-from=$(FROM)

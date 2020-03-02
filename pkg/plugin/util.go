@@ -56,12 +56,13 @@ type RepositoryOptions struct {
 }
 
 type ElasticsearchOptions struct {
-	ServiceName string `json:"serviceName"`
-	Namespace   string `json:"namespace"`
-	Scheme      string `json:"scheme"`
-	Port        int32  `json:"port"`
-	AuthSecret  string `json:"authSecret"`
-	TLSSecret   string `json:"tlsSecret,omitempty"`
+	ServiceName        string `json:"serviceName"`
+	Namespace          string `json:"namespace"`
+	Scheme             string `json:"scheme"`
+	Port               int32  `json:"port"`
+	AuthSecret         string `json:"authSecret"`
+	TLSSecret          string `json:"tlsSecret,omitempty"`
+	InsecureSkipVerify bool   `json:"insecureSkipVerify,omitempty"`
 }
 
 var _ framework.Plugin = (*ElasticsearchDDM)(nil)
@@ -128,7 +129,8 @@ func configureTLS(k8sClient kubernetes.Interface, cfg *es.Config, opt Elasticsea
 	caCertPool.AppendCertsFromPEM(caCert)
 	tr := &http.Transport{
 		TLSClientConfig: &tls.Config{
-			RootCAs: caCertPool,
+			InsecureSkipVerify: opt.InsecureSkipVerify,
+			RootCAs:            caCertPool,
 		},
 	}
 	cfg.Transport = tr

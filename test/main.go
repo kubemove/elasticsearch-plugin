@@ -3,8 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"os"
-	"strconv"
 	"time"
 
 	"github.com/elastic/go-elasticsearch/v7"
@@ -42,6 +40,11 @@ var (
 	srcPluginAddress string
 	dstPluginAddress string
 	indexName        string
+	indexFrom        string
+	srcClusterIp     string
+	dstClusterIp     string
+	srcESNodePort    int32
+	dstESNodePort    int32
 
 	srcKubeClient kubernetes.Interface
 	dstKubeClient kubernetes.Interface
@@ -67,6 +70,37 @@ func main() {
 func rootCmd() *cobra.Command {
 	rootCmd := &cobra.Command{
 		Use: "eck-plugin",
+		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+			loader := &clientcmd.ClientConfigLoadingRules{ExplicitPath: kubeConfigPath}
+
+			srcConfig, err := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(loader, &clientcmd.ConfigOverrides{CurrentContext: srcContext}).ClientConfig()
+			if err != nil {
+				return err
+			}
+			dstConfig, err := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(loader, &clientcmd.ConfigOverrides{CurrentContext: dstContext}).ClientConfig()
+			if err != nil {
+				return err
+			}
+
+			srcKubeClient, err = kubernetes.NewForConfig(srcConfig)
+			if err != nil {
+				return err
+			}
+			srcDmClient, err = dynamic.NewForConfig(srcConfig)
+			if err != nil {
+				return err
+			}
+
+			dstKubeClient, err = kubernetes.NewForConfig(dstConfig)
+			if err != nil {
+				return err
+			}
+			dstDmClient, err = dynamic.NewForConfig(dstConfig)
+			if err != nil {
+				return err
+			}
+			return nil
+		},
 	}
 
 	rootCmd.PersistentFlags().StringVar(&kubeConfigPath, "kubeconfigpath", "", "KubeConfig path")
@@ -75,6 +109,11 @@ func rootCmd() *cobra.Command {
 	rootCmd.PersistentFlags().StringVar(&srcPluginAddress, "src-plugin", "", "URL of the source plugin")
 	rootCmd.PersistentFlags().StringVar(&dstPluginAddress, "dst-plugin", "", "URL of the destination plugin")
 	rootCmd.PersistentFlags().StringVar(&indexName, "index-name", "test-index", "Name of the index to insert")
+	rootCmd.PersistentFlags().StringVar(&indexFrom, "index-from", "active", "Mode of targeted es")
+	rootCmd.PersistentFlags().StringVar(&srcClusterIp, "src-cluster-ip", "", "IP address of the source cluster")
+	rootCmd.PersistentFlags().StringVar(&dstClusterIp, "dst-cluster-ip", "", "IP address of the source cluster")
+	rootCmd.PersistentFlags().Int32Var(&srcESNodePort, "src-es-nodeport", 0, "Node port of source ES service")
+	rootCmd.PersistentFlags().Int32Var(&dstESNodePort, "dst-es-nodeport", 0, "Node port of source ES service")
 
 	rootCmd.AddCommand(triggerInit())
 	rootCmd.AddCommand(triggerSync())
@@ -199,7 +238,6 @@ func triggerSync() *cobra.Command {
 				if statusResp == nil {
 					return true, err
 				}
-				fmt.Println("Status: ", statusResp.Status)
 				switch statusResp.Status {
 				case plugin.Completed:
 					return true, nil // snapshot completed successfully. we are done.
@@ -226,7 +264,6 @@ func triggerSync() *cobra.Command {
 				if statusResp == nil {
 					return true, err
 				}
-				fmt.Println("Status: ", statusResp.Status)
 				switch statusResp.Status {
 				case plugin.Completed:
 					return true, nil // restore completed successfully. we are done.
@@ -245,16 +282,10 @@ func triggerSync() *cobra.Command {
 
 func insertIndexes() *cobra.Command {
 	cmd := &cobra.Command{
-		Use: "insert-indexes",
+		Use: "insert-index",
 		RunE: func(cmd *cobra.Command, args []string) error {
 
-			port, err := strconv.Atoi(os.Getenv(SourceESServiceNodePort))
-			if err != nil {
-				return err
-			}
-			address := os.Getenv(SourceClusterIP)
-
-			client, err := getESClient(address, port)
+			client, err := getESClient(srcKubeClient, srcClusterIp, srcESNodePort)
 			if err != nil {
 				return err
 			}
@@ -283,24 +314,21 @@ func showIndexes() *cobra.Command {
 		Use: "show-indexes",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			var address string
-			var port int
+			var port int32
+			var kubeClient kubernetes.Interface
 			var err error
 
-			if os.Getenv(EngineMode) == esPlugin.EngineModeActive {
-				port, err = strconv.Atoi(os.Getenv(SourceESServiceNodePort))
-				if err != nil {
-					return err
-				}
-				address = os.Getenv(SourceClusterIP)
+			if indexFrom == esPlugin.EngineModeActive {
+				port = srcESNodePort
+				address = srcClusterIp
+				kubeClient = srcKubeClient
 			} else {
-				port, err = strconv.Atoi(os.Getenv(DestinationESServiceNodePort))
-				if err != nil {
-					return err
-				}
-				address = os.Getenv(DestinationClusterIP)
+				port = dstESNodePort
+				address = dstClusterIp
+				kubeClient = dstKubeClient
 			}
 
-			client, err := getESClient(address, port)
+			client, err := getESClient(kubeClient, address, port)
 			if err != nil {
 				return err
 			}
@@ -437,13 +465,14 @@ func setup() error {
 	return nil
 }
 
-func getESClient(address string, port int) (*elasticsearch.Client, error) {
-	return esPlugin.NewElasticsearchClient(srcKubeClient, esPlugin.ElasticsearchOptions{
-		ServiceName: address,
-		Namespace:   "default",
-		Scheme:      "https",
-		Port:        int32(port),
-		AuthSecret:  "sample-es-es-elastic-user",
-		TLSSecret:   "sample-es-es-http-ca-internal",
+func getESClient(kubeClient kubernetes.Interface, address string, port int32) (*elasticsearch.Client, error) {
+	return esPlugin.NewElasticsearchClient(kubeClient, esPlugin.ElasticsearchOptions{
+		ServiceName:        address,
+		Namespace:          "default",
+		Scheme:             "https",
+		Port:               port,
+		AuthSecret:         "sample-es-es-elastic-user",
+		TLSSecret:          "sample-es-es-http-ca-internal",
+		InsecureSkipVerify: true,
 	})
 }
