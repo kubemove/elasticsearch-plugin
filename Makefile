@@ -135,7 +135,17 @@ plugin-image: build
 	@docker push $(PLUGIN_IMAGE)
 
 .PHONY: update-crds
+ORG?=kubemove
+BRANCH?=master
+CRD_SRC:=https://raw.githubusercontent.com/$(ORG)/kubemove/$(BRANCH)/deploy/crds/
 update-crds:
+	@echo "Updating CRD definition....."
+	@curl -fsSL $(CRD_SRC)/kubemove.io_datasyncs_crd.yaml    > deploy/dependencies/crds/kubemove.io_datasyncs_crd.yaml
+	@curl -fsSL $(CRD_SRC)/kubemove.io_moveengines_crd.yaml  > deploy/dependencies/crds/kubemove.io_moveengines_crd.yaml
+	@curl -fsSL $(CRD_SRC)/kubemove.io_movepairs_crd.yaml    > deploy/dependencies/crds/kubemove.io_movepairs_crd.yaml
+	@curl -fsSL $(CRD_SRC)/kubemove.io_movereverses_crd.yaml > deploy/dependencies/crds/kubemove.io_movereverses_crd.yaml
+	@curl -fsSL $(CRD_SRC)/kubemove.io_moveswitches_crd.yaml > deploy/dependencies/crds/kubemove.io_moveswitches_crd.yaml
+	@echo "Done"
 
 # Testing related Environments
 KUBECONFIG?=
@@ -225,14 +235,16 @@ prepare: build
 			--env KUBECONFIG=$(KUBECONFIG)                          \
 			--env GO111MODULE=on                                    \
 			--env GOFLAGS="-mod=vendor"                             \
+			--env REGISTRY=$(REGISTRY)                              \
+			--env MINIO_ACCESS_KEY=$(MINIO_ACCESS_KEY) 				\
+			--env MINIO_SECRET_KEY=$(MINIO_SECRET_KEY) 				\
+			--env SRC_CONTEXT=$(SRC_CONTEXT)                        \
+			--env DST_CONTEXT=$(DST_CONTEXT)                        \
+			--env SRC_CLUSTER_IP=$(SRC_CLUSTER_IP) 					\
+			--env DST_CLUSTER_IP=$(DST_CLUSTER_IP) 					\
 			$(BUILD_IMAGE)                                          \
 			/bin/bash -c "                                          \
-				DOCKER_REGISTRY=$(REGISTRY)                         \
 				KUBECONFIG=$${KUBECONFIG#$(HOME)}                   \
-				MINIO_ACCESS_KEY=$(MINIO_ACCESS_KEY) 				\
-				MINIO_SECRET_KEY=$(MINIO_SECRET_KEY) 				\
-				SRC_CONTEXT=$(SRC_CONTEXT)                          \
-				DST_CONTEXT=$(DST_CONTEXT)                          \
 				./hack/prepare.sh		                            \
 				"
 
@@ -358,6 +370,8 @@ reset:
 			--env HTTP_PROXY=$(HTTP_PROXY)                          \
 			--env HTTPS_PROXY=$(HTTPS_PROXY)                        \
 			--env KUBECONFIG=$(KUBECONFIG)                          \
+			--env SRC_CONTEXT=$(SRC_CONTEXT) \
+			--env DST_CONTEXT=$(DST_CONTEXT) \
 			$(BUILD_IMAGE)                                          \
 			/bin/bash -c "                                          \
 				DOCKER_REGISTRY=$(REGISTRY)                         \

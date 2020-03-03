@@ -42,12 +42,12 @@ kubectl apply -f ./deploy/dependencies/minio_server.yaml --context=${DST_CONTEXT
 
 echo ""
 echo "Waiting for all pods of of the source cluster to be ready"
-kubectl wait --for=condition=READY pods --all --timeout=5m --context=${SRC_CONTEXT}
+kubectl wait --for=condition=READY pods --all --timeout=5m --context=${SRC_CONTEXT} || true
 echo "Waiting for all pods of of the source cluster to be ready"
-kubectl wait --for=condition=READY pods --all --timeout=5m --context=${DST_CONTEXT}
+kubectl wait --for=condition=READY pods --all --timeout=5m --context=${DST_CONTEXT} || true
 
-MINIO_NODEPORT:=$(kubectl get service minio -o yaml --context=${DST_CONTEXT} | grep nodePort | cut -c15-)
-MINIO_SERVER_ADDRESS:=${DST_CLUSTER_IP}:${MINIO_NODEPORT}
+MINIO_NODEPORT=$(kubectl get service minio -o yaml --context=${DST_CONTEXT} | grep nodePort | cut -c15-)
+MINIO_SERVER_ADDRESS=${DST_CLUSTER_IP}:${MINIO_NODEPORT}
 
 echo "Creating demo bucket in the  Minio server"
 mc config host add es-repo http://${MINIO_SERVER_ADDRESS} ${MINIO_ACCESS_KEY} ${MINIO_SECRET_KEY}
