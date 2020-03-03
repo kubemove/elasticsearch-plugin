@@ -61,7 +61,7 @@ func triggerSnapshot(k8sClient kubernetes.Interface, params PluginParameters, sn
 	fmt.Println("Response: ", resp.String())
 
 	if resp.StatusCode != http.StatusOK {
-		rootCause, err := parseErrorCause(resp)
+		rootCause, err := parseErrorCause(resp.Body)
 		if err != nil {
 			return "", fmt.Errorf("failed to trigger snapshot.\n"+
 				"Also, failed to parse the error info. Reason: %s", err.Error())
@@ -111,7 +111,7 @@ func triggerRestore(k8sClient kubernetes.Interface, params PluginParameters, sna
 	fmt.Println("Response: ", resp.String())
 
 	if resp.StatusCode != http.StatusOK {
-		rootCause, err := parseErrorCause(resp)
+		rootCause, err := parseErrorCause(resp.Body)
 		if err != nil {
 			return "", fmt.Errorf("failed to trigger restore.\n"+
 				"Also, failed to parse the error info. Reason: %s", err.Error())

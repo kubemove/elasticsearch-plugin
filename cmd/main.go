@@ -67,7 +67,9 @@ func cmdRun() *cobra.Command {
 		Short:        "Run some helper commands to test the plugin",
 		SilenceUsage: true,
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-			flags.DumpAll(cmd.Flags())
+			if opt.Debug {
+				flags.DumpAll(cmd.Flags())
+			}
 			err := opt.Setup()
 			if err != nil {
 				return err
@@ -87,6 +89,7 @@ func cmdRun() *cobra.Command {
 	cmdRun.PersistentFlags().StringVar(&opt.DstClusterIp, "dst-cluster-ip", "", "IP address of the source cluster")
 	cmdRun.PersistentFlags().Int64Var(&opt.SrcESNodePort, "src-es-nodeport", 0, "Node port of source ES service")
 	cmdRun.PersistentFlags().Int64Var(&opt.DstESNodePort, "dst-es-nodeport", 0, "Node port of source ES service")
+	cmdRun.PersistentFlags().BoolVar(&opt.Debug, "debug", false, "Specify whether to print debug info")
 
 	cmdRun.AddCommand(cmdTriggerInit())
 	cmdRun.AddCommand(cmdTriggerSync())
@@ -98,8 +101,8 @@ func cmdRun() *cobra.Command {
 
 func cmdTriggerInit() *cobra.Command {
 	return &cobra.Command{
-		Use:   "trigger-init",
-		Short: "Prepare Elasticsearches for sync",
+		Use:          "trigger-init",
+		Short:        "Prepare Elasticsearches for sync",
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return opt.TriggerInit()
@@ -109,8 +112,8 @@ func cmdTriggerInit() *cobra.Command {
 
 func cmdTriggerSync() *cobra.Command {
 	return &cobra.Command{
-		Use:   "trigger-sync",
-		Short: "Trigger SYNC API of the plugin for backup and restore",
+		Use:          "trigger-sync",
+		Short:        "Trigger SYNC API of the plugin for backup and restore",
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return opt.TriggerSync()
@@ -120,8 +123,8 @@ func cmdTriggerSync() *cobra.Command {
 
 func cmdInsertIndexes() *cobra.Command {
 	return &cobra.Command{
-		Use:   "insert-index",
-		Short: "Insert an index into a Elasticsearch",
+		Use:          "insert-index",
+		Short:        "Insert an index into a Elasticsearch",
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return opt.TriggerInit()
@@ -131,8 +134,8 @@ func cmdInsertIndexes() *cobra.Command {
 
 func cmdShowIndexes() *cobra.Command {
 	return &cobra.Command{
-		Use:   "show-indexes",
-		Short: "Show all indexes of a Elasticsearch",
+		Use:          "show-indexes",
+		Short:        "Show all indexes of a Elasticsearch",
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			resp, err := opt.ShowIndexes()

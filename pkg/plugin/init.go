@@ -89,7 +89,7 @@ func registerSnapshotRepository(k8sClient kubernetes.Interface, params PluginPar
 	fmt.Println("Response: ", resp.String())
 
 	if resp.StatusCode != http.StatusOK {
-		rootCause, err := parseErrorCause(resp)
+		rootCause, err := parseErrorCause(resp.Body)
 		if err != nil {
 			return fmt.Errorf("failed to register Snapshot Repository to the Elasticsearch.\n"+
 				"Also, failed to parse the error info. Reason: %s", err.Error())

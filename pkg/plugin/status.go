@@ -92,7 +92,7 @@ func retrieveBackupState(k8sClient kubernetes.Interface, params PluginParameters
 	fmt.Println("Response: ", resp.String())
 
 	if resp.StatusCode != http.StatusOK {
-		rootCause, err := parseErrorCause(resp)
+		rootCause, err := parseErrorCause(resp.Body)
 		if err != nil {
 			return framework.Errored, fmt.Errorf("failed to retrive backup state.\n"+
 				"Also, failed to parse the error info. Reason: %s", err.Error())
@@ -154,7 +154,7 @@ func retrieveRestoreState(k8sClient kubernetes.Interface, params PluginParameter
 	fmt.Println("Response: ", resp.String())
 
 	if resp.StatusCode != http.StatusOK {
-		rootCause, err := parseErrorCause(resp)
+		rootCause, err := parseErrorCause(resp.Body)
 		if err != nil {
 			return framework.Errored, fmt.Errorf("failed to retrive restore state.\n"+
 				"Also, failed to parse the error info. Reason: %s", err.Error())

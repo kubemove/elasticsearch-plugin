@@ -36,6 +36,7 @@ type PluginOptions struct {
 	DstClusterIp     string
 	SrcESNodePort    int64
 	DstESNodePort    int64
+	Debug            bool
 
 	SrcKubeClient kubernetes.Interface
 	DstKubeClient kubernetes.Interface

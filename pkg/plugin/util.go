@@ -5,7 +5,7 @@ import (
 	"crypto/x509"
 	"encoding/json"
 	"fmt"
-	"github.com/elastic/go-elasticsearch/v7/esapi"
+	"io"
 	"io/ioutil"
 	"net/http"
 
@@ -71,7 +71,7 @@ type ErrorInfo struct {
 	Error ErrorCause `json:"error,omitempty"`
 }
 type ErrorCause struct {
-	RootCause RootCause `json:"root_cause,omitempty"`
+	RootCause []RootCause `json:"root_cause,omitempty"`
 }
 type RootCause struct {
 	Type   string `json:"type,omitempty"`
@@ -189,16 +189,16 @@ func extractPluginParameters(dmClient dynamic.Interface, params map[string]strin
 	return parameters, moveEngine.Spec.Mode, nil
 }
 
-func parseErrorCause(resp *esapi.Response) (*RootCause, error) {
-	var errorInfo *ErrorInfo
-	data, err := ioutil.ReadAll(resp.Body)
+func parseErrorCause(body io.ReadCloser) (*RootCause, error) {
+	var errorInfo ErrorInfo
+	data, err := ioutil.ReadAll(body)
 	if err != nil {
 		return nil, err
 	}
 
-	err = json.Unmarshal(data, errorInfo)
+	err = json.Unmarshal(data, &errorInfo)
 	if err != nil {
 		return nil, err
 	}
-	return &errorInfo.Error.RootCause, nil
+	return &errorInfo.Error.RootCause[0], nil
 }
