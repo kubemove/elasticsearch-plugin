@@ -21,11 +21,22 @@ jobs:
 
     - name: Check out code into the Go module directory
       uses: actions/checkout@v1
+    - name: Setup Docker Registry
+      env:
+        REGISTRY: emruzhossain
+        DOCKER_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        USERNAME: emruzhossain
+      run: |
+        docker login --username ${USERNAME} --password ${DOCKER_TOKEN}
 
     - name: Run checks
+      env:
+        REGISTRY: emruzhossain
       run: |
         make lint
 
     - name: Build
+      env:
+        REGISTRY: emruzhossain
       run: |
         make build
