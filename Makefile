@@ -138,7 +138,7 @@ plugin-image: build
 update-crds:
 
 # Testing related Environments
-KUBECONFIG_PATH?=
+KUBECONFIG?=
 SRC_CONTEXT?=kind-src-cluster
 DST_CONTEXT?=kind-dst-cluster
 
@@ -151,47 +151,90 @@ SRC_CLUSTER_IP=$(shell (kubectl get -n kube-system $(SRC_CONTROL_PANE) -o yaml -
 DST_CONTROL_PANE:=$(shell /bin/bash -c "kubectl get pod -n kube-system  -o name --context=$(DST_CONTEXT)| grep kube-apiserver")
 DST_CLUSTER_IP=$(shell (kubectl get -n kube-system $(DST_CONTROL_PANE) -o yaml --context=$(DST_CONTEXT)| grep advertise-address= | cut -c27-))
 
-.PHONY: cluster_ip
-cluster_ip:
-	@echo $(SRC_CLUSTER_IP)
-	@echo $(DST_CLUSTER_IP)
+export MINIO_ACCESS_KEY=not@id
+export MINIO_SECRET_KEY=not@secret
+
+
+MINO_NODEPORT=
+MINIO_SERVER_ADDRESS=
+
+set-var:
+	export MINIO_NODEPORT=$(eval MINIO_NODEPORT:=$(shell (kubectl get service minio -o yaml --context=$(DST_CONTEXT) | grep nodePort | cut -c15-)))
+	export MINIO_SERVER_ADDRESS=$(eval MINIO_SERVER_ADDRESS:=$(DST_CLUSTER_IP):$(MINIO_NODEPORT))
+
+test-var: set-var
+	@echo $(MINIO_NODEPORT)
+	@echo $(MINO_SERVER_ADDRESS)
+demo:
+	@echo "Creating Minio Secret in the source cluster"
+	@cat deploy/dependencies/minio_secret.yaml | \
+		MINIO_ACCESS_KEY=$(MINIO_ACCESS_KEY) \
+		MINIO_SECRET_KEY=$(MINIO_SECRET_KEY) \
+		envsubst | kubectl apply -f - --context=$(SRC_CONTEXT)
+	@echo "Deploying Minio Server in the destination cluster"
+	@kubectl apply -f deploy/dependencies/minio_server.yaml --context=$(SRC_CONTEXT)
+	@echo "Waiting for all pods to be ready"
+	@kubectl wait --for=condition=READY pods --all --all-namespaces --timeout=5m --context=$(DST_SRC_CONTEXT)
+
+docker-test:
+	$(eval MINIO_NODEPORT:=$(shell (kubectl get service minio -o yaml --context=$(DST_CONTEXT) | grep nodePort | cut -c15-)))
+	$(eval MINIO_SERVER_ADDRESS:=$(DST_CLUSTER_IP):$(MINIO_NODEPORT))
+	@docker run                                                     \
+			-i                                                      \
+			--rm                                                    \
+			--net=host                                              \
+			-u $$(id -u):$$(id -g)                                  \
+			-v $$(pwd):/go/src/$(MODULE)                            \
+			-v $$(pwd)/.go/cache:/.cache                            \
+			-v $(HOME)/.kube:/.kube                                 \
+			-v /tmp:/.mc											\
+			-w /go/src/$(MODULE)                                    \
+			--env HTTP_PROXY=$(HTTP_PROXY)                          \
+			--env HTTPS_PROXY=$(HTTPS_PROXY)                        \
+			--env KUBECONFIG=$(KUBECONFIG)                          \
+			--env GO111MODULE=on                                    \
+			--env GOFLAGS="-mod=vendor"                             \
+			$(BUILD_IMAGE)                                          \
+			/bin/bash -c "                                          \
+				DOCKER_REGISTRY=$(REGISTRY)                         \
+				KUBECONFIG=$${KUBECONFIG#$(HOME)}                   \
+				MINIO_ACCESS_KEY=$(MINIO_ACCESS_KEY) 				\
+                MINIO_SECRET_KEY=$(MINIO_SECRET_KEY) 				\
+                MINIO_SERVER_ADDRESS=$(MINIO_SERVER_ADDRESS)		\
+                SRC_CONTEXT=$(SRC_CONTEXT)                          \
+                DST_CONTEXT=$(DST_CONTEXT)                          \
+				./hack/prepare.sh		                            \
+				"
 
 # Install all dependencies for testing
-# Example: make prepare REGISTRY=<your docker registry> KUBECONFIG_PATH=<kubeconfig path> SRC_CONTEXT=<source context> DST_CONTEXT=<destination context>
+# Example: make prepare REGISTRY=<your docker registry> KUBECONFIG=<kubeconfig path> SRC_CONTEXT=<source context> DST_CONTEXT=<destination context>
 .PHONY: prepare
-prepare:
-	@echo "Installing ECK operator in the source cluster"
-	@kubectl apply -f https://download.elastic.co/downloads/eck/1.0.1/all-in-one.yaml --context=$(SRC_CONTEXT)
-	@echo "Installing ECK operator in the destination cluster"
-	@kubectl apply -f https://download.elastic.co/downloads/eck/1.0.1/all-in-one.yaml --context=$(DST_CONTEXT)
-	@echo ""
-	@echo "Registering Kubemove CRDs in the source cluster"
-	@kubectl apply -f deploy/dependencies/crds/ --context=$(SRC_CONTEXT)
-	@echo "Registering Kubemove CRDs in the destination cluster"
-	@kubectl apply -f deploy/dependencies/crds/ --context=$(DST_CONTEXT)
-	@echo ""
-	@echo "Creating RBAC resources in the source cluster"
-	@kubectl apply -f deploy/dependencies/rbac.yaml --context=$(SRC_CONTEXT)
-	@echo "Creating RBAC resources in the destination cluster"
-	@kubectl apply -f deploy/dependencies/rbac.yaml --context=$(DST_CONTEXT)
-	@echo ""
-	@echo "Installing DataSync controller in the source cluster"
-	@kubectl apply -f deploy/dependencies/datasync_controller.yaml --context=$(SRC_CONTEXT)
-	@echo "Installing DataSync controller in the destination cluster"
-	@kubectl apply -f deploy/dependencies/datasync_controller.yaml --context=$(DST_CONTEXT)
-	@echo ""
-	@echo "Installing MoveEngine controller in the source cluster"
-	@kubectl apply -f deploy/dependencies/moveengine_controller.yaml --context=$(SRC_CONTEXT)
-	@echo "Installing MoveEngine controller in the destination cluster"
-	@kubectl apply -f deploy/dependencies/moveengine_controller.yaml --context=$(DST_CONTEXT)
-	@echo ""
-	@echo "Creating Minio Secret in the source cluster"
-	@kubectl apply -f deploy/dependencies/minio_secret.yaml --context=$(SRC_CONTEXT)
-	@echo "Creating Minio Secret in the destination cluster"
-	@kubectl apply -f deploy/dependencies/minio_secret.yaml --context=$(DST_CONTEXT)
-	@echo ""
-	@echo "Deploying Minio Server in the destination cluster"
-	@kubectl apply -f deploy/dependencies/minio_server.yaml --context=$(DST_CONTEXT)
+prepare: build
+	@docker run                                                     \
+			-i                                                      \
+			--rm                                                    \
+			--net=host                                              \
+			-u $$(id -u):$$(id -g)                                  \
+			-v $$(pwd):/go/src/$(MODULE)                            \
+			-v $$(pwd)/.go/cache:/.cache                            \
+			-v $(HOME)/.kube:/.kube                                 \
+			-v /tmp:/.mc											\
+			-w /go/src/$(MODULE)                                    \
+			--env HTTP_PROXY=$(HTTP_PROXY)                          \
+			--env HTTPS_PROXY=$(HTTPS_PROXY)                        \
+			--env KUBECONFIG=$(KUBECONFIG)                          \
+			--env GO111MODULE=on                                    \
+			--env GOFLAGS="-mod=vendor"                             \
+			$(BUILD_IMAGE)                                          \
+			/bin/bash -c "                                          \
+				DOCKER_REGISTRY=$(REGISTRY)                         \
+				KUBECONFIG=$${KUBECONFIG#$(HOME)}                   \
+				MINIO_ACCESS_KEY=$(MINIO_ACCESS_KEY) 				\
+				MINIO_SECRET_KEY=$(MINIO_SECRET_KEY) 				\
+				SRC_CONTEXT=$(SRC_CONTEXT)                          \
+				DST_CONTEXT=$(DST_CONTEXT)                          \
+				./hack/prepare.sh		                            \
+				"
 
 # Install Elasticsearch Plugin in source and destination cluster
 # Example: make install-plugin
@@ -236,13 +279,13 @@ setup-sync:
 #Example: make trigger-init
 .PHONY: trigger-init
 trigger-init:
-	$(eval SRC_PLUGIN_NODEPORT:=$(shell (kubectl get service eck-plugin -o yaml --context=$(SRC_CONTEXT) | grep nodePort | cut -c15-)))
+	$(eval SRC_PLUGIN_NODEPORT:=$(shell (kubectl get service elasticsearch-plugin -o yaml --context=$(SRC_CONTEXT) | grep nodePort | cut -c15-)))
 	$(eval SRC_PLUGIN_ADDRESS:=$(SRC_CLUSTER_IP):$(SRC_PLUGIN_NODEPORT))
-	$(eval DST_PLUGIN_NODEPORT:=$(shell (kubectl get service eck-plugin -o yaml --context=$(DST_CONTEXT) | grep nodePort | cut -c15-)))
+	$(eval DST_PLUGIN_NODEPORT:=$(shell (kubectl get service elasticsearch-plugin -o yaml --context=$(DST_CONTEXT) | grep nodePort | cut -c15-)))
 	$(eval DST_PLUGIN_ADDRESS:=$(DST_CLUSTER_IP):$(DST_PLUGIN_NODEPORT))
 
-	@go run test/main.go trigger-init \
-		--kubeconfigpath=$(KUBECONFIG_PATH)  \
+	@build/bin/elasticsearch-plugin run trigger-init \
+		--kubeconfig=$(KUBECONFIG)  \
 		--src-context=$(SRC_CONTEXT) \
 		--dst-context=$(DST_CONTEXT) \
 		--src-plugin=$(SRC_PLUGIN_ADDRESS) \
@@ -252,13 +295,13 @@ trigger-init:
 # Example: make trigger-sync
 .PHONY: trigger-sync
 trigger-sync:
-	$(eval SRC_PLUGIN_NODEPORT:=$(shell (kubectl get service eck-plugin -o yaml --context=$(SRC_CONTEXT) | grep nodePort | cut -c15-)))
+	$(eval SRC_PLUGIN_NODEPORT:=$(shell (kubectl get service elasticsearch-plugin -o yaml --context=$(SRC_CONTEXT) | grep nodePort | cut -c15-)))
 	$(eval SRC_PLUGIN_ADDRESS:=$(SRC_CLUSTER_IP):$(SRC_PLUGIN_NODEPORT))
-	$(eval DST_PLUGIN_NODEPORT:=$(shell (kubectl get service eck-plugin -o yaml --context=$(DST_CONTEXT) | grep nodePort | cut -c15-)))
+	$(eval DST_PLUGIN_NODEPORT:=$(shell (kubectl get service elasticsearch-plugin -o yaml --context=$(DST_CONTEXT) | grep nodePort | cut -c15-)))
 	$(eval DST_PLUGIN_ADDRESS:=$(DST_CLUSTER_IP):$(DST_PLUGIN_NODEPORT))
 
-	@go run test/main.go trigger-sync \
-		--kubeconfigpath=$(KUBECONFIG_PATH)  \
+	@build/bin/elasticsearch-plugin run trigger-sync \
+		--kubeconfig=$(KUBECONFIG)  \
 		--src-context=$(SRC_CONTEXT) \
 		--dst-context=$(DST_CONTEXT) \
 		--src-plugin=$(SRC_PLUGIN_ADDRESS) \
@@ -272,8 +315,8 @@ insert-index:
 	$(eval SRC_ES_NODEPORT:=$(shell (kubectl get service sample-es-es-http -o yaml --context=$(SRC_CONTEXT) | grep nodePort | cut -c15-)))
 	$(eval DST_ES_NODEPORT:=$(shell (kubectl get service sample-es-es-http -o yaml --context=$(DST_CONTEXT) | grep nodePort | cut -c15-)))
 
-	@go run test/main.go insert-index \
-		--kubeconfigpath=$(KUBECONFIG_PATH)  \
+	@build/bin/elasticsearch-plugin run insert-index \
+		--kubeconfig=$(KUBECONFIG)  \
 		--src-context=$(SRC_CONTEXT) \
 		--dst-context=$(DST_CONTEXT) \
 		--src-cluster-ip=$(SRC_CLUSTER_IP) \
@@ -291,8 +334,8 @@ show-indexes:
 	$(eval DST_ES_NODEPORT:=$(shell (kubectl get service sample-es-es-http -o yaml --context=$(DST_CONTEXT) | grep nodePort | cut -c15-)))
 	$(eval DST_PLUGIN_ADDRESS:=$(DST_CLUSTER_IP):$(DST_PLUGIN_NODEPORT))
 
-	@go run test/main.go show-indexes \
-		--kubeconfigpath=$(KUBECONFIG_PATH)  \
+	@build/bin/elasticsearch-plugin run show-indexes \
+		--kubeconfig=$(KUBECONFIG)  \
 		--src-context=$(SRC_CONTEXT) \
 		--dst-context=$(DST_CONTEXT) \
 		--src-cluster-ip=$(SRC_CLUSTER_IP) \
@@ -300,3 +343,24 @@ show-indexes:
 		--src-es-nodeport=$(SRC_ES_NODEPORT) \
 		--dst-es-nodeport=$(DST_ES_NODEPORT) \
 		--index-from=$(FROM)
+
+# Remove all the resources installed for testing this plugin
+# Example: make reset
+reset:
+	@docker run                                                     \
+			-i                                                      \
+			--rm                                                    \
+			--net=host                                              \
+			-u $$(id -u):$$(id -g)                                  \
+			-v $$(pwd):/go/src/$(MODULE)                            \
+			-v $(HOME)/.kube:/.kube                                 \
+			-w /go/src/$(MODULE)                                    \
+			--env HTTP_PROXY=$(HTTP_PROXY)                          \
+			--env HTTPS_PROXY=$(HTTPS_PROXY)                        \
+			--env KUBECONFIG=$(KUBECONFIG)                          \
+			$(BUILD_IMAGE)                                          \
+			/bin/bash -c "                                          \
+				DOCKER_REGISTRY=$(REGISTRY)                         \
+				KUBECONFIG=$${KUBECONFIG#$(HOME)}                   \
+				./hack/reset.sh		                                \
+				"

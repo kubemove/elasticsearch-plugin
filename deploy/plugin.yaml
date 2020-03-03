@@ -1,20 +1,20 @@
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: eck-plugin
+  name: elasticsearch-plugin
   labels:
-    name: eck-plugin
+    name: elasticsearch-plugin
 
 ---
 kind: ClusterRoleBinding
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
-  name: eck-plugin
+  name: elasticsearch-plugin
   labels:
-    name: eck-plugin
+    name: elasticsearch-plugin
 subjects:
 - kind: ServiceAccount
-  name: eck-plugin
+  name: elasticsearch-plugin
   namespace: default
 roleRef:
   kind: ClusterRole
@@ -25,37 +25,37 @@ roleRef:
 apiVersion: v1
 kind: Service
 metadata:
-  name: eck-plugin
+  name: elasticsearch-plugin
 spec:
   ports:
   - port: 8000
     protocol: TCP
     targetPort: 8000
   selector:
-    name: eck-plugin
+    name: elasticsearch-plugin
   type: NodePort
 
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: eck-plugin
+  name: elasticsearch-plugin
 spec:
   replicas: 1
   selector:
     matchLabels:
-      name: eck-plugin
+      name: elasticsearch-plugin
   template:
     metadata:
       labels:
-        name: eck-plugin
+        name: elasticsearch-plugin
     spec:
-      serviceAccountName: eck-plugin
+      serviceAccountName: elasticsearch-plugin
       containers:
-      - name: eck-plugin
-        # Replace this with the built image name
+      - name: elasticsearch-plugin
         image: ${PLUGIN_IMAGE}
         imagePullPolicy: Always
+        args: ["start"]
         env:
         - name: WATCH_NAMESPACE
           valueFrom:

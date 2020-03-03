@@ -92,8 +92,13 @@ func retrieveBackupState(k8sClient kubernetes.Interface, params PluginParameters
 	fmt.Println("Response: ", resp.String())
 
 	if resp.StatusCode != http.StatusOK {
-		// TODO: parse response and return failure case
-		return framework.Errored, fmt.Errorf("failed to create snapshot. Reason: <TO DO>")
+		rootCause, err := parseErrorCause(resp)
+		if err != nil {
+			return framework.Errored, fmt.Errorf("failed to retrive backup state.\n"+
+				"Also, failed to parse the error info. Reason: %s", err.Error())
+		}
+		return framework.Errored, fmt.Errorf("failed to retrieve backup state.\n"+
+			"Error Type: %s, Reason: %s", rootCause.Type, rootCause.Reason)
 	}
 
 	var statusResponse SnapshotGetResponse
@@ -149,8 +154,13 @@ func retrieveRestoreState(k8sClient kubernetes.Interface, params PluginParameter
 	fmt.Println("Response: ", resp.String())
 
 	if resp.StatusCode != http.StatusOK {
-		// TODO: parse response and return failure case
-		return framework.Errored, fmt.Errorf("failed to create snapshot. Reason: <TO DO>")
+		rootCause, err := parseErrorCause(resp)
+		if err != nil {
+			return framework.Errored, fmt.Errorf("failed to retrive restore state.\n"+
+				"Also, failed to parse the error info. Reason: %s", err.Error())
+		}
+		return framework.Errored, fmt.Errorf("failed to retrieve restore state.\n"+
+			"Error Type: %s, Reason: %s", rootCause.Type, rootCause.Reason)
 	}
 
 	// parse recovery response

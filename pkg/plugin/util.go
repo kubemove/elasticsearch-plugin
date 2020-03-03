@@ -5,6 +5,8 @@ import (
 	"crypto/x509"
 	"encoding/json"
 	"fmt"
+	"github.com/elastic/go-elasticsearch/v7/esapi"
+	"io/ioutil"
 	"net/http"
 
 	"github.com/go-logr/logr"
@@ -63,6 +65,17 @@ type ElasticsearchOptions struct {
 	AuthSecret         string `json:"authSecret"`
 	TLSSecret          string `json:"tlsSecret,omitempty"`
 	InsecureSkipVerify bool   `json:"insecureSkipVerify,omitempty"`
+}
+
+type ErrorInfo struct {
+	Error ErrorCause `json:"error,omitempty"`
+}
+type ErrorCause struct {
+	RootCause RootCause `json:"root_cause,omitempty"`
+}
+type RootCause struct {
+	Type   string `json:"type,omitempty"`
+	Reason string `json:"reason,omitempty"`
 }
 
 var _ framework.Plugin = (*ElasticsearchDDM)(nil)
@@ -174,4 +187,18 @@ func extractPluginParameters(dmClient dynamic.Interface, params map[string]strin
 	}
 
 	return parameters, moveEngine.Spec.Mode, nil
+}
+
+func parseErrorCause(resp *esapi.Response) (*RootCause, error) {
+	var errorInfo *ErrorInfo
+	data, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	err = json.Unmarshal(data, errorInfo)
+	if err != nil {
+		return nil, err
+	}
+	return &errorInfo.Error.RootCause, nil
 }

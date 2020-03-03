@@ -61,8 +61,13 @@ func triggerSnapshot(k8sClient kubernetes.Interface, params PluginParameters, sn
 	fmt.Println("Response: ", resp.String())
 
 	if resp.StatusCode != http.StatusOK {
-		// TODO: parse response and return failure case
-		return "", fmt.Errorf("failed to create snapshot. Reason: <TO DO>")
+		rootCause, err := parseErrorCause(resp)
+		if err != nil {
+			return "", fmt.Errorf("failed to trigger snapshot.\n"+
+				"Also, failed to parse the error info. Reason: %s", err.Error())
+		}
+		return "", fmt.Errorf("failed to trigger snapshot.\n"+
+			"Error Type: %s, Reason: %s", rootCause.Type, rootCause.Reason)
 	}
 
 	return "", nil
@@ -106,8 +111,13 @@ func triggerRestore(k8sClient kubernetes.Interface, params PluginParameters, sna
 	fmt.Println("Response: ", resp.String())
 
 	if resp.StatusCode != http.StatusOK {
-		// TODO: parse response and return failure case
-		return "", fmt.Errorf("failed to restore snapshot. Reason: <TO DO>")
+		rootCause, err := parseErrorCause(resp)
+		if err != nil {
+			return "", fmt.Errorf("failed to trigger restore.\n"+
+				"Also, failed to parse the error info. Reason: %s", err.Error())
+		}
+		return "", fmt.Errorf("failed to trigger restore.\n"+
+			"Error Type: %s, Reason: %s", rootCause.Type, rootCause.Reason)
 	}
 
 	return "", nil
