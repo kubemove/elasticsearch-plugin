@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 set -eou pipefail
 
+SRC_CONTROL_PANE=$(kubectl get pod -n kube-system  -o name --context=${SRC_CONTEXT}| grep kube-apiserver)
+SRC_CLUSTER_IP=$(kubectl get -n kube-system ${SRC_CONTROL_PANE} -o yaml --context=${SRC_CONTEXT}| grep advertise-address= | cut -c27-)
+
+DST_CONTROL_PANE=$(kubectl get pod -n kube-system  -o name --context=${DST_CONTEXT}| grep kube-apiserver)
+DST_CLUSTER_IP=$(kubectl get -n kube-system ${DST_CONTROL_PANE} -o yaml --context=${DST_CONTEXT}| grep advertise-address= | cut -c27-)
+
 echo "Installing ECK operator in the source cluster"
 kubectl apply -f https://download.elastic.co/downloads/eck/1.0.1/all-in-one.yaml --context=${SRC_CONTEXT}
 echo "Installing ECK operator in the destination cluster"
