@@ -63,8 +63,8 @@ jobs:
     - name: Viewing cluster info
       run: |
         kubectl config view
-        kubectl config view --context=dst-cluster
-        kubectl config view --context=src-cluster
+        kubectl config view --context=kind-dst-cluster
+        kubectl config view --context=kind-src-cluster
 
 #    - name: Setup Docker Registry
 #      env:
