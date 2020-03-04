@@ -62,12 +62,12 @@ jobs:
         name: dst-cluster
 
     - name: Setup Docker Registry
-        env:
-          REGISTRY: emruzhossain
-          DOCKER_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
-          USERNAME: emruzhossain
-        run: |
-          docker login --username ${USERNAME} --password ${DOCKER_TOKEN}
+      env:
+        REGISTRY: emruzhossain
+        DOCKER_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        USERNAME: emruzhossain
+      run: |
+        docker login --username ${USERNAME} --password ${DOCKER_TOKEN}
 
     - name: Prepare the clusters for testing
       env:
