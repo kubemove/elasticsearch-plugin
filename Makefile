@@ -134,10 +134,13 @@ plugin-image: build
 	@echo "Pushing $(PLUGIN_IMAGE) image...."
 	@docker push $(PLUGIN_IMAGE)
 
-.PHONY: update-crds
+
+# Update CRDs to latest version kubemove repo
+# Example: make update-crds ORG=<your username> BRANCH=<your branch>
 ORG?=kubemove
 BRANCH?=master
 CRD_SRC:=https://raw.githubusercontent.com/$(ORG)/kubemove/$(BRANCH)/deploy/crds/
+.PHONY: update-crds
 update-crds:
 	@echo "Updating CRD definition....."
 	@curl -fsSL $(CRD_SRC)/kubemove.io_datasyncs_crd.yaml    > deploy/dependencies/crds/kubemove.io_datasyncs_crd.yaml
@@ -168,58 +171,10 @@ export MINIO_SECRET_KEY=not@secret
 MINO_NODEPORT=
 MINIO_SERVER_ADDRESS=
 
-set-var:
-	export MINIO_NODEPORT=$(eval MINIO_NODEPORT:=$(shell (kubectl get service minio -o yaml --context=$(DST_CONTEXT) | grep nodePort | cut -c15-)))
-	export MINIO_SERVER_ADDRESS=$(eval MINIO_SERVER_ADDRESS:=$(DST_CLUSTER_IP):$(MINIO_NODEPORT))
-
-test-var: set-var
-	@echo $(MINIO_NODEPORT)
-	@echo $(MINO_SERVER_ADDRESS)
-demo:
-	@echo "Creating Minio Secret in the source cluster"
-	@cat deploy/dependencies/minio_secret.yaml | \
-		MINIO_ACCESS_KEY=$(MINIO_ACCESS_KEY) \
-		MINIO_SECRET_KEY=$(MINIO_SECRET_KEY) \
-		envsubst | kubectl apply -f - --context=$(SRC_CONTEXT)
-	@echo "Deploying Minio Server in the destination cluster"
-	@kubectl apply -f deploy/dependencies/minio_server.yaml --context=$(SRC_CONTEXT)
-	@echo "Waiting for all pods to be ready"
-	@kubectl wait --for=condition=READY pods --all --all-namespaces --timeout=5m --context=$(DST_SRC_CONTEXT)
-
-docker-test:
-	$(eval MINIO_NODEPORT:=$(shell (kubectl get service minio -o yaml --context=$(DST_CONTEXT) | grep nodePort | cut -c15-)))
-	$(eval MINIO_SERVER_ADDRESS:=$(DST_CLUSTER_IP):$(MINIO_NODEPORT))
-	@docker run                                                     \
-			-i                                                      \
-			--rm                                                    \
-			--net=host                                              \
-			-u $$(id -u):$$(id -g)                                  \
-			-v $$(pwd):/go/src/$(MODULE)                            \
-			-v $$(pwd)/.go/cache:/.cache                            \
-			-v $(HOME)/.kube:/.kube                                 \
-			-v /tmp:/.mc											\
-			-w /go/src/$(MODULE)                                    \
-			--env HTTP_PROXY=$(HTTP_PROXY)                          \
-			--env HTTPS_PROXY=$(HTTPS_PROXY)                        \
-			--env KUBECONFIG=$(KUBECONFIG)                          \
-			--env GO111MODULE=on                                    \
-			--env GOFLAGS="-mod=vendor"                             \
-			$(BUILD_IMAGE)                                          \
-			/bin/bash -c "                                          \
-				DOCKER_REGISTRY=$(REGISTRY)                         \
-				KUBECONFIG=$${KUBECONFIG#$(HOME)}                   \
-				MINIO_ACCESS_KEY=$(MINIO_ACCESS_KEY) 				\
-                MINIO_SECRET_KEY=$(MINIO_SECRET_KEY) 				\
-                MINIO_SERVER_ADDRESS=$(MINIO_SERVER_ADDRESS)		\
-                SRC_CONTEXT=$(SRC_CONTEXT)                          \
-                DST_CONTEXT=$(DST_CONTEXT)                          \
-				./hack/prepare.sh		                            \
-				"
-
 # Install all dependencies for testing
 # Example: make prepare REGISTRY=<your docker registry> KUBECONFIG=<kubeconfig path> SRC_CONTEXT=<source context> DST_CONTEXT=<destination context>
 .PHONY: prepare
-prepare: build
+prepare: plugin-image
 	@docker run                                                     \
 			-i                                                      \
 			--rm                                                    \
@@ -240,8 +195,6 @@ prepare: build
 			--env MINIO_SECRET_KEY=$(MINIO_SECRET_KEY) 				\
 			--env SRC_CONTEXT=$(SRC_CONTEXT)                        \
 			--env DST_CONTEXT=$(DST_CONTEXT)                        \
-			--env SRC_CLUSTER_IP=$(SRC_CLUSTER_IP) 					\
-			--env DST_CLUSTER_IP=$(DST_CLUSTER_IP) 					\
 			$(BUILD_IMAGE)                                          \
 			/bin/bash -c "                                          \
 				KUBECONFIG=$${KUBECONFIG#$(HOME)}                   \
@@ -355,6 +308,35 @@ show-indexes:
 		--src-es-nodeport=$(SRC_ES_NODEPORT) \
 		--dst-es-nodeport=$(DST_ES_NODEPORT) \
 		--index-from=$(FROM)
+
+# Run E2E tests.
+# Before running ths command make sure you have run "make prepare", "make install-plugin", "make deploy-es" and "make setup-sync"
+# Example: make e2e-test
+GINKGO_ARGS ?= "--flakeAttempts=1"
+e2e-test:
+	@docker run                                                     \
+			-i                                                      \
+			--rm                                                    \
+			--net=host                                              \
+			-u $$(id -u):$$(id -g)                                  \
+			-v $$(pwd):/go/src/$(MODULE)                            \
+			-v $$(pwd)/.go/cache:/.cache                            \
+			-v $(HOME)/.kube:/.kube                                 \
+			-v /tmp:/.mc											\
+			-w /go/src/$(MODULE)                                    \
+			--env HTTP_PROXY=$(HTTP_PROXY)                          \
+			--env HTTPS_PROXY=$(HTTPS_PROXY)                        \
+			--env KUBECONFIG=$(KUBECONFIG)                          \
+			--env GO111MODULE=on                                    \
+			--env GOFLAGS="-mod=vendor"                             \
+			--env SRC_CONTEXT=$(SRC_CONTEXT)                        \
+			--env DST_CONTEXT=$(DST_CONTEXT)                        \
+			--env GINKGO_ARGS=$(GINKGO_ARGS)                        \
+			$(BUILD_IMAGE)                                          \
+			/bin/bash -c "                                          \
+				KUBECONFIG=$${KUBECONFIG#$(HOME)}                   \
+				./hack/e2e-test.sh		                            \
+				"
 
 # Remove all the resources installed for testing this plugin
 # Example: make reset

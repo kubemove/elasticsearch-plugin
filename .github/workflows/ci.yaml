@@ -40,3 +40,51 @@ jobs:
         REGISTRY: emruzhossain
       run: |
         make build
+
+  test:
+    name: E2E Test
+    runs-on: ubuntu-latest
+    steps:
+
+    - name: Check out code into the Go module directory
+      uses: actions/checkout@v1
+
+    - name: Create source cluster
+      id: kind
+      uses: engineerd/setup-kind@v0.1.0
+      with:
+        name: src-cluster
+
+    - name: Create destinaion cluster
+        id: kind
+        uses: engineerd/setup-kind@v0.1.0
+        with:
+          name: dst-cluster
+
+    - name: Setup Docker Registry
+        env:
+          REGISTRY: emruzhossain
+          DOCKER_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+          USERNAME: emruzhossain
+        run: |
+          docker login --username ${USERNAME} --password ${DOCKER_TOKEN}
+
+    - name: Prepare the clusters for testing
+      env:
+        REGISTRY: emruzhossain
+        SRC_CONTEXT: kind-src-cluster
+        DST_CONTEXT: kind-dst-cluster
+      run: |
+        make prepare
+        make install-plugin
+        make deploy-es
+        sleep 180
+        make setup-sync
+
+    - name: Run e2e tests
+      env:
+        REGISTRY: emruzhossain
+        SRC_CONTEXT: kind-src-cluster
+        DST_CONTEXT: kind-dst-cluster
+      run: |
+        make e2e-test

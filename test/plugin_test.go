@@ -2,6 +2,7 @@ package test
 
 import (
 	"flag"
+	"github.com/appscode/go/crypto/rand"
 	"os"
 	"strings"
 	"testing"
@@ -14,7 +15,7 @@ import (
 var opt util.PluginOptions
 
 func TestMain(m *testing.M) {
-	flag.StringVar(&opt.KubeConfigPath, "kubeconfig", "", "KubeConfig path")
+	flag.StringVar(&opt.KubeConfigPath, "kubeconfigpath", "", "KubeConfig path")
 	flag.StringVar(&opt.SrcContext, "src-context", "", "Source Context")
 	flag.StringVar(&opt.DstContext, "dst-context", "", "Destination Context")
 	flag.StringVar(&opt.SrcPluginAddress, "src-plugin", "", "URL of the source plugin")
@@ -46,7 +47,7 @@ var _ = Describe("Elasticsearch Plugin Test", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			By("Creating a sample index in the source ES")
-			opt.IndexName = "e2e_demo"
+			opt.IndexName = rand.WithUniqSuffix("e2e-demo")
 			err = opt.InsertIndex()
 			Expect(err).NotTo(HaveOccurred())
 

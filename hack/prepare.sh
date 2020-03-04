@@ -50,5 +50,6 @@ MINIO_NODEPORT=$(kubectl get service minio -o yaml --context=${DST_CONTEXT} | gr
 MINIO_SERVER_ADDRESS=${DST_CLUSTER_IP}:${MINIO_NODEPORT}
 
 echo "Creating demo bucket in the  Minio server"
+sleep 60
 mc config host add es-repo http://${MINIO_SERVER_ADDRESS} ${MINIO_ACCESS_KEY} ${MINIO_SECRET_KEY}
 mc mb es-repo/demo
