@@ -2,10 +2,11 @@ package test
 
 import (
 	"flag"
-	"github.com/appscode/go/crypto/rand"
 	"os"
 	"strings"
 	"testing"
+
+	"github.com/appscode/go/crypto/rand"
 
 	"github.com/kubemove/elasticsearch-plugin/pkg/util"
 	. "github.com/onsi/ginkgo"

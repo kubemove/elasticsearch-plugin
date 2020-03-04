@@ -72,8 +72,8 @@ jobs:
     - name: Prepare the clusters for testing
       env:
         REGISTRY: emruzhossain
-        SRC_CONTEXT: kind-src-cluster
-        DST_CONTEXT: kind-dst-cluster
+        SRC_CONTEXT: src-cluster
+        DST_CONTEXT: dst-cluster
       run: |
         make prepare
         make install-plugin
@@ -84,7 +84,7 @@ jobs:
     - name: Run e2e tests
       env:
         REGISTRY: emruzhossain
-        SRC_CONTEXT: kind-src-cluster
-        DST_CONTEXT: kind-dst-cluster
+        SRC_CONTEXT: src-cluster
+        DST_CONTEXT: dst-cluster
       run: |
         make e2e-test

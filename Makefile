@@ -28,24 +28,24 @@ BUILD_DIRS:= build/bin \
 $(BUILD_DIRS):
 	@mkdir -p $@
 
-# Run go fmt in all packages except vendor
-# Example: make fmt REGISTRY=<your docker registry>
-.PHONY: fmt
-fmt: $(BUILD_DIRS)
-	@echo "Running go fmt...."
-	@docker run                                                     \
-			-i                                                      \
-			--rm                                                    \
-			-u $$(id -u):$$(id -g)                                  \
-			-v $$(pwd):/go/src/$(MODULE)                            \
-			-v $$(pwd)/.go/cache:/.cache                            \
-			-w /go/src                                              \
-			--env HTTP_PROXY=$(HTTP_PROXY)                          \
-			--env HTTPS_PROXY=$(HTTPS_PROXY)                        \
-			--env GO111MODULE=on                                    \
-			--env GOFLAGS="-mod=vendor"                             \
-			$(BUILD_IMAGE)                                          \
-			gofmt -s -w $(PACKAGES)
+# Run gofmt and goimports in all packages except vendor
+# Example: make format REGISTRY=<your docker registry>
+.PHONY: format
+format: $(BUILD_DIRS)
+	@echo "Formatting repo...."
+	@docker run                                                     			\
+			-i                                                      			\
+			--rm                                                    			\
+			-u $$(id -u):$$(id -g)                                  			\
+			-v $$(pwd):/go/src/$(MODULE)                            			\
+			-v $$(pwd)/.go/cache:/.cache                            			\
+			-w /go/src                                              			\
+			--env HTTP_PROXY=$(HTTP_PROXY)                          			\
+			--env HTTPS_PROXY=$(HTTPS_PROXY)                        			\
+			--env GO111MODULE=on                                    			\
+			--env GOFLAGS="-mod=vendor"                             			\
+			$(BUILD_IMAGE)                                          			\
+			/bin/sh -c "gofmt -s -w $(PACKAGES)	&& goimports -w $(PACKAGES)"
 	@echo "Done"
 
 # Run linter
@@ -104,7 +104,7 @@ clean:
 # Build Binary
 # Example: make build
 .PHONY: build
-build: $(BUILD_DIRS) fmt
+build: $(BUILD_DIRS) format
 	@echo "Building Elasticsearch Plugin...."
 	@docker run                                                     \
 			-i                                                      \
