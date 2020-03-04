@@ -56,10 +56,10 @@ jobs:
         name: src-cluster
 
     - name: Create destinaion cluster
-        id: kind
-        uses: engineerd/setup-kind@v0.1.0
-        with:
-          name: dst-cluster
+      id: kind
+      uses: engineerd/setup-kind@v0.1.0
+      with:
+        name: dst-cluster
 
     - name: Setup Docker Registry
         env:
