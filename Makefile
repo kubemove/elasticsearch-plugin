@@ -205,9 +205,9 @@ prepare: plugin-image
 # Example: make install-plugin
 .PHONY: install-plugin
 install-plugin:
+	@echo " "
 	@echo "Installing Elasticsearch Plugin into the source cluster...."
 	@cat deploy/plugin.yaml | envsubst | kubectl apply -f - --context=$(SRC_CONTEXT)
-	@echo " "
 	@echo "Installing Elasticsearch Plugin into the destination cluster...."
 	@cat deploy/plugin.yaml | envsubst | kubectl apply -f - --context=$(DST_CONTEXT)
 
@@ -215,9 +215,9 @@ install-plugin:
 # Example: make deploy-es
 .PHONY: deploy-es
 deploy-es:
+	@echo " "
 	@echo "Deploying sample Easticsearch into the source cluster...."
 	@cat deploy/elasticsearch.yaml | kubectl apply -f - --context=$(SRC_CONTEXT)
-	@echo " "
 	@echo "Deploying sample Easticsearch into the destination cluster...."
 	@cat deploy/elasticsearch.yaml | kubectl apply -f - --context=$(DST_CONTEXT)
 
@@ -225,6 +225,7 @@ deploy-es:
 # Example: make stup-sync
 .PHONY: setup-sync
 setup-sync:
+	@echo " "
 	$(eval MINIO_NODEPORT:=$(shell (kubectl get service minio -o yaml --context=$(DST_CONTEXT) | grep nodePort | cut -c15-)))
 	$(eval MINIO_SERVER_ADDRESS:=$(DST_CLUSTER_IP):$(MINIO_NODEPORT))
 
@@ -233,7 +234,6 @@ setup-sync:
 		MODE=active \
 		MINIO_SERVER_ADDRESS=$(MINIO_SERVER_ADDRESS)\
 		envsubst | kubectl apply -f - --context=$(SRC_CONTEXT)
-	@echo " "
 	@echo "Creating MoveEngine CR into the destination cluster...."
 	@cat deploy/moveengine.yaml | \
     		MODE=standby \
