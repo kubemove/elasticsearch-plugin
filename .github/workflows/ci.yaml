@@ -62,6 +62,7 @@ jobs:
 #        name: dst-cluster
     - name: Testing clusters
       run: |
+        export KUBECONFIG="$(kind get kubeconfig-path --name="src-cluster")"
         kubectl cluster-info
         kubectl get pods --all-namespaces
 
