@@ -61,7 +61,7 @@ jobs:
       with:
         name: dst-cluster
     - name: Viewing cluster info
-      run:
+      run: |
         kubectl config view
         kubectl config view --context=dst-cluster
         kubectl config view --context=src-cluster
