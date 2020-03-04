@@ -50,13 +50,13 @@ jobs:
       uses: actions/checkout@v1
 
     - name: Create source cluster
-      id: kind
+      id: kind-src-cluster
       uses: engineerd/setup-kind@v0.1.0
       with:
         name: src-cluster
 
     - name: Create destinaion cluster
-      id: kind
+      id: kind-dst-cluster
       uses: engineerd/setup-kind@v0.1.0
       with:
         name: dst-cluster
