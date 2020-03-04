@@ -55,16 +55,16 @@ jobs:
       with:
         name: src-cluster
 
-    - name: Create destinaion cluster
-      id: kind-dst-cluster
-      uses: engineerd/setup-kind@v0.1.0
-      with:
-        name: dst-cluster
-    - name: Viewing cluster info
+#    - name: Create destinaion cluster
+#      id: kind-dst-cluster
+#      uses: engineerd/setup-kind@v0.1.0
+#      with:
+#        name: dst-cluster
+    - name: Testing clusters
       run: |
-        kubectl config view
-        kubectl config view --context=kind-dst-cluster
-        kubectl config view --context=kind-src-cluster
+        kubectl cluster-info
+        kubectl get pods --all-namespaces
+
 
 #    - name: Setup Docker Registry
 #      env:
