@@ -55,14 +55,13 @@ jobs:
       with:
         name: src-cluster
 
-#    - name: Create destinaion cluster
-#      id: kind-dst-cluster
-#      uses: engineerd/setup-kind@v0.1.0
-#      with:
-#        name: dst-cluster
+    - name: Create destinaion cluster
+      id: kind-dst-cluster
+      uses: engineerd/setup-kind@v0.3.0
+      with:
+        name: dst-cluster
     - name: Testing clusters
       run: |
-        export KUBECONFIG="$(kind get kubeconfig-path --name="src-cluster")"
         kubectl cluster-info
         kubectl get pods --all-namespaces
 
