@@ -230,15 +230,15 @@ setup-sync:
 	$(eval MINIO_SERVER_ADDRESS:=$(DST_CLUSTER_IP):$(MINIO_NODEPORT))
 
 	@echo "Creating MoveEngine CR into the source cluster...."
-	@cat deploy/moveengine.yaml | \
-		MODE=active \
-		MINIO_SERVER_ADDRESS=$(MINIO_SERVER_ADDRESS)\
+	@cat deploy/moveengine.yaml |                                    \
+		MODE=active                                                  \
+		MINIO_SERVER_ADDRESS=$(MINIO_SERVER_ADDRESS)                 \
 		envsubst | kubectl apply -f - --context=$(SRC_CONTEXT)
 	@echo "Creating MoveEngine CR into the destination cluster...."
-	@cat deploy/moveengine.yaml | \
-    		MODE=standby \
-    		MINIO_SERVER_ADDRESS=$(MINIO_SERVER_ADDRESS)\
-    		envsubst | kubectl apply -f - --context=$(DST_CONTEXT)
+	@cat deploy/moveengine.yaml |                                    \
+		MODE=standby                                                 \
+		MINIO_SERVER_ADDRESS=$(MINIO_SERVER_ADDRESS)                 \
+		envsubst | kubectl apply -f - --context=$(DST_CONTEXT)
 
 # Trigger INIT API
 #Example: make trigger-init
@@ -250,10 +250,10 @@ trigger-init:
 	$(eval DST_PLUGIN_ADDRESS:=$(DST_CLUSTER_IP):$(DST_PLUGIN_NODEPORT))
 
 	@build/bin/elasticsearch-plugin run trigger-init \
-		--kubeconfig=$(KUBECONFIG)  \
-		--src-context=$(SRC_CONTEXT) \
-		--dst-context=$(DST_CONTEXT) \
-		--src-plugin=$(SRC_PLUGIN_ADDRESS) \
+		--kubeconfig=$(KUBECONFIG)                   \
+		--src-context=$(SRC_CONTEXT)                 \
+		--dst-context=$(DST_CONTEXT)                 \
+		--src-plugin=$(SRC_PLUGIN_ADDRESS)           \
 		--dst-plugin=$(DST_PLUGIN_ADDRESS)
 
 # Trigger SYNC API
@@ -266,10 +266,10 @@ trigger-sync:
 	$(eval DST_PLUGIN_ADDRESS:=$(DST_CLUSTER_IP):$(DST_PLUGIN_NODEPORT))
 
 	@build/bin/elasticsearch-plugin run trigger-sync \
-		--kubeconfig=$(KUBECONFIG)  \
-		--src-context=$(SRC_CONTEXT) \
-		--dst-context=$(DST_CONTEXT) \
-		--src-plugin=$(SRC_PLUGIN_ADDRESS) \
+		--kubeconfig=$(KUBECONFIG)                   \
+		--src-context=$(SRC_CONTEXT)                 \
+		--dst-context=$(DST_CONTEXT)                 \
+		--src-plugin=$(SRC_PLUGIN_ADDRESS)           \
 		--dst-plugin=$(DST_PLUGIN_ADDRESS)
 
 # Insert a index in the source cluster
@@ -281,13 +281,13 @@ insert-index:
 	$(eval DST_ES_NODEPORT:=$(shell (kubectl get service sample-es-es-http -o yaml --context=$(DST_CONTEXT) | grep nodePort | cut -c15-)))
 
 	@build/bin/elasticsearch-plugin run insert-index \
-		--kubeconfig=$(KUBECONFIG)  \
-		--src-context=$(SRC_CONTEXT) \
-		--dst-context=$(DST_CONTEXT) \
-		--src-cluster-ip=$(SRC_CLUSTER_IP) \
-		--dst-cluster-ip=$(DST_SRC_CLUSTER_IP) \
-		--src-es-nodeport=$(SRC_ES_NODEPORT) \
-		--dst-es-nodeport=$(DST_ES_NODEPORT) \
+		--kubeconfig=$(KUBECONFIG)                   \
+		--src-context=$(SRC_CONTEXT)                 \
+		--dst-context=$(DST_CONTEXT)                 \
+		--src-cluster-ip=$(SRC_CLUSTER_IP)           \
+		--dst-cluster-ip=$(DST_SRC_CLUSTER_IP)       \
+		--src-es-nodeport=$(SRC_ES_NODEPORT)         \
+		--dst-es-nodeport=$(DST_ES_NODEPORT)         \
 		--index-name=$(INDEX_NAME)
 
 # Show all indexes from the targeted ES
@@ -300,13 +300,13 @@ show-indexes:
 	$(eval DST_PLUGIN_ADDRESS:=$(DST_CLUSTER_IP):$(DST_PLUGIN_NODEPORT))
 
 	@build/bin/elasticsearch-plugin run show-indexes \
-		--kubeconfig=$(KUBECONFIG)  \
-		--src-context=$(SRC_CONTEXT) \
-		--dst-context=$(DST_CONTEXT) \
-		--src-cluster-ip=$(SRC_CLUSTER_IP) \
-		--dst-cluster-ip=$(DST_CLUSTER_IP) \
-		--src-es-nodeport=$(SRC_ES_NODEPORT) \
-		--dst-es-nodeport=$(DST_ES_NODEPORT) \
+		--kubeconfig=$(KUBECONFIG)                   \
+		--src-context=$(SRC_CONTEXT)                 \
+		--dst-context=$(DST_CONTEXT)                 \
+		--src-cluster-ip=$(SRC_CLUSTER_IP)           \
+		--dst-cluster-ip=$(DST_CLUSTER_IP)           \
+		--src-es-nodeport=$(SRC_ES_NODEPORT)         \
+		--dst-es-nodeport=$(DST_ES_NODEPORT)         \
 		--index-from=$(FROM)
 
 # Run E2E tests.
@@ -314,7 +314,6 @@ show-indexes:
 # Example: make e2e-test
 GINKGO_ARGS ?= "--flakeAttempts=1"
 e2e-test:
-	@echo "$(KUBECONFIG)"
 	@docker run                                                     \
 			-i                                                      \
 			--rm                                                    \
@@ -335,6 +334,7 @@ e2e-test:
 			--env GINKGO_ARGS=$(GINKGO_ARGS)                        \
 			$(BUILD_IMAGE)                                          \
 			/bin/bash -c "                                          \
+				KUBECONFIG=$${KUBECONFIG#$(HOME)}                   \
 				./hack/e2e-test.sh		                            \
 				"
 
@@ -352,8 +352,8 @@ reset:
 			--env HTTP_PROXY=$(HTTP_PROXY)                          \
 			--env HTTPS_PROXY=$(HTTPS_PROXY)                        \
 			--env KUBECONFIG=$(KUBECONFIG)                          \
-			--env SRC_CONTEXT=$(SRC_CONTEXT) \
-			--env DST_CONTEXT=$(DST_CONTEXT) \
+			--env SRC_CONTEXT=$(SRC_CONTEXT)                        \
+			--env DST_CONTEXT=$(DST_CONTEXT)                        \
 			$(BUILD_IMAGE)                                          \
 			/bin/bash -c "                                          \
 				DOCKER_REGISTRY=$(REGISTRY)                         \

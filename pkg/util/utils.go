@@ -2,7 +2,11 @@ package util
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"time"
+
+	"k8s.io/client-go/util/homedir"
 
 	"github.com/elastic/go-elasticsearch/v7"
 
@@ -127,6 +131,15 @@ func getElasticsearch(dmClient dynamic.Interface, gvr schema.GroupVersionResourc
 }
 
 func (opt *PluginOptions) Setup() error {
+	if opt.KubeConfigPath == "" {
+		kubecfg := os.Getenv("KUBECONFIG")
+		if kubecfg != "" {
+			opt.KubeConfigPath = kubecfg
+		} else {
+			opt.KubeConfigPath = filepath.Join(homedir.HomeDir(), ".kube", "config")
+		}
+	}
+
 	loader := &clientcmd.ClientConfigLoadingRules{ExplicitPath: opt.KubeConfigPath}
 
 	srcConfig, err := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(loader, &clientcmd.ConfigOverrides{CurrentContext: opt.SrcContext}).ClientConfig()
