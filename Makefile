@@ -314,6 +314,7 @@ show-indexes:
 # Example: make e2e-test
 GINKGO_ARGS ?= "--flakeAttempts=1"
 e2e-test:
+	@echo "$(KUBECONFIG)"
 	@docker run                                                     \
 			-i                                                      \
 			--rm                                                    \
@@ -334,7 +335,6 @@ e2e-test:
 			--env GINKGO_ARGS=$(GINKGO_ARGS)                        \
 			$(BUILD_IMAGE)                                          \
 			/bin/bash -c "                                          \
-				KUBECONFIG=$${KUBECONFIG#$(HOME)}                   \
 				./hack/e2e-test.sh		                            \
 				"
 
