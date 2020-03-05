@@ -101,7 +101,7 @@ func insertMinioRepository(dmClient dynamic.Interface) error {
 	time.Sleep(10 * time.Second)
 
 	// wait for ES to be ready with the plugin installer
-	err = wait.PollImmediate(5*time.Second, 5*time.Minute, func() (done bool, err error) {
+	err = wait.PollImmediate(5*time.Second, 10*time.Minute, func() (done bool, err error) {
 		es, err := getElasticsearch(dmClient, gvr)
 		if err == nil {
 			return es.Status.Phase == eck.ElasticsearchReadyPhase, nil
