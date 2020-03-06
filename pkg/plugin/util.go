@@ -8,6 +8,11 @@ import (
 	"io"
 	"io/ioutil"
 	"net/http"
+	"time"
+
+	"github.com/pkg/errors"
+
+	corev1 "k8s.io/api/core/v1"
 
 	"github.com/go-logr/logr"
 	framework "github.com/kubemove/kubemove/pkg/plugin/ddm/plugin"
@@ -16,10 +21,19 @@ import (
 	"k8s.io/client-go/kubernetes"
 
 	"github.com/kubemove/kubemove/pkg/apis/kubemove/v1alpha1"
+
+	esv7 "github.com/elastic/go-elasticsearch/v7"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/wait"
+
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 
-	es "github.com/elastic/go-elasticsearch/v7"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+
+	common "github.com/elastic/cloud-on-k8s/pkg/apis/common/v1"
+	eck "github.com/elastic/cloud-on-k8s/pkg/apis/elasticsearch/v1"
+	kerr "k8s.io/apimachinery/pkg/api/errors"
 )
 
 const (
@@ -34,6 +48,12 @@ const (
 	TLSCertKey       = "tls.crt"
 	KeySnapshotName  = "snapshotName"
 )
+
+var esGVR = schema.GroupVersionResource{
+	Group:    "elasticsearch.k8s.elastic.co",
+	Version:  "v1",
+	Resource: "elasticsearches",
+}
 
 type ElasticsearchDDM struct {
 	Log       logr.Logger
@@ -58,8 +78,9 @@ type RepositoryOptions struct {
 }
 
 type ElasticsearchOptions struct {
-	ServiceName        string `json:"serviceName"`
+	Name               string `json:"name"`
 	Namespace          string `json:"namespace"`
+	ServiceName        string `json:"serviceName"`
 	Scheme             string `json:"scheme"`
 	Port               int32  `json:"port"`
 	AuthSecret         string `json:"authSecret"`
@@ -80,9 +101,9 @@ type RootCause struct {
 
 var _ framework.Plugin = (*ElasticsearchDDM)(nil)
 
-func NewElasticsearchClient(k8sClient kubernetes.Interface, opt ElasticsearchOptions) (*es.Client, error) {
+func NewElasticsearchClient(k8sClient kubernetes.Interface, opt ElasticsearchOptions) (*esv7.Client, error) {
 	// configure client
-	cfg := es.Config{
+	cfg := esv7.Config{
 		Addresses: []string{fmt.Sprintf("%s://%s:%d", opt.Scheme, opt.ServiceName, opt.Port)},
 	}
 
@@ -105,10 +126,10 @@ func NewElasticsearchClient(k8sClient kubernetes.Interface, opt ElasticsearchOpt
 		}
 	}
 
-	return es.NewClient(cfg)
+	return esv7.NewClient(cfg)
 }
 
-func configureBasicAuth(k8sClient kubernetes.Interface, cfg *es.Config, opt ElasticsearchOptions) error {
+func configureBasicAuth(k8sClient kubernetes.Interface, cfg *esv7.Config, opt ElasticsearchOptions) error {
 	// get the elastic user secret
 	authSecret, err := k8sClient.CoreV1().Secrets(opt.Namespace).Get(opt.AuthSecret, metav1.GetOptions{})
 	if err != nil {
@@ -126,7 +147,7 @@ func configureBasicAuth(k8sClient kubernetes.Interface, cfg *es.Config, opt Elas
 	return nil
 }
 
-func configureTLS(k8sClient kubernetes.Interface, cfg *es.Config, opt ElasticsearchOptions) error {
+func configureTLS(k8sClient kubernetes.Interface, cfg *esv7.Config, opt ElasticsearchOptions) error {
 	// get the internal cert secret
 	certSecret, err := k8sClient.CoreV1().Secrets(opt.Namespace).Get(opt.TLSSecret, metav1.GetOptions{})
 	if err != nil {
@@ -201,4 +222,83 @@ func parseErrorCause(body io.ReadCloser) (*RootCause, error) {
 		return nil, err
 	}
 	return &errorInfo.Error.RootCause[0], nil
+}
+
+// insertMinioRepository patches both source and destination Elasticsearches and inject s3-repository plugin installer init-container
+func insertMinioRepository(dmClient dynamic.Interface, params PluginParameters) error {
+	es, err := getElasticsearch(dmClient, params)
+	if err != nil {
+		return err
+	}
+
+	// insert plugin installer init-container
+	es.Spec.NodeSets[0].PodTemplate = corev1.PodTemplateSpec{
+		Spec: corev1.PodSpec{
+			InitContainers: []corev1.Container{
+				{
+					Name: "install-plugins",
+					Command: []string{
+						"sh",
+						"-c",
+						"bin/elasticsearch-plugin install --batch repository-s3",
+					},
+				},
+			},
+		},
+	}
+
+	// insert minio credentiaals
+	es.Spec.SecureSettings = []common.SecretSource{
+		{
+			SecretName: params.Repository.Credentials,
+		},
+	}
+
+	// convert updated Elasticsearch back to unstructured object
+	updatedES, err := runtime.DefaultUnstructuredConverter.ToUnstructured(&es)
+	if err != nil {
+		return errors.Wrap(err, "failed to convert updated Elasticsearch into Unstructured object")
+	}
+
+	// update Elasticsearch
+	_, err = dmClient.Resource(esGVR).Namespace(params.Elasticsearch.Namespace).Update(&unstructured.Unstructured{Object: updatedES}, metav1.UpdateOptions{})
+	if err != nil {
+		return err
+	}
+
+	// give a delay for the ES phase to be updated
+	time.Sleep(10 * time.Second)
+	// wait for ES to be ready with the plugin installer
+	return WaitUntilElasticsearchReady(dmClient, params)
+}
+
+func WaitUntilElasticsearchReady(dmClient dynamic.Interface, params PluginParameters) error {
+	err := wait.PollImmediate(5*time.Second, 10*time.Minute, func() (done bool, err error) {
+		es, err := getElasticsearch(dmClient, params)
+		if err == nil {
+			return es.Status.Phase == eck.ElasticsearchReadyPhase, nil
+		}
+		if !kerr.IsNotFound(err) {
+			return true, err
+		}
+		return false, nil
+	})
+
+	return err
+}
+
+func getElasticsearch(dmClient dynamic.Interface, params PluginParameters) (*eck.Elasticsearch, error) {
+	// read Elasticsearch object
+	resp, err := dmClient.Resource(esGVR).Namespace(params.Elasticsearch.Namespace).Get(params.Elasticsearch.Name, metav1.GetOptions{})
+	if err != nil {
+		return nil, err
+	}
+
+	// convert to unstructured object into Elasticsearch type
+	var es eck.Elasticsearch
+	err = runtime.DefaultUnstructuredConverter.FromUnstructured(resp.UnstructuredContent(), &es)
+	if err != nil {
+		return nil, err
+	}
+	return &es, nil
 }

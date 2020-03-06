@@ -4,24 +4,14 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/kubemove/elasticsearch-plugin/pkg/plugin"
+
 	"github.com/kubemove/kubemove/pkg/plugin/proto"
 	"google.golang.org/grpc"
 )
 
 // TriggerInit prepare source and destination Elasticsearch to backup and restore from a Minio repository
 func (opt *PluginOptions) TriggerInit() error {
-	fmt.Println("Installing Minio Repository plugin in the source ES")
-	err := insertMinioRepository(opt.SrcDmClient)
-	if err != nil {
-		return err
-	}
-
-	fmt.Println("Installing Minio Repository plugin in the destination ES")
-	err = insertMinioRepository(opt.DstDmClient)
-	if err != nil {
-		return err
-	}
-
 	fmt.Println("Establishing gRPC connection with ECK plugin of source cluster")
 	srcConn, err := grpc.Dial(opt.SrcPluginAddress, grpc.WithInsecure(), grpc.WithBlock())
 	if err != nil {
@@ -52,6 +42,23 @@ func (opt *PluginOptions) TriggerInit() error {
 	}
 	fmt.Println(initResp.String())
 
+	params := plugin.PluginParameters{
+		Elasticsearch: plugin.ElasticsearchOptions{
+			Name:               "sample-es",
+			Namespace:          "default",
+			ServiceName:        "sample-es-es-http",
+			Scheme:             "https",
+			Port:               9200,
+			AuthSecret:         "sample-es-es-elastic-user",
+			TLSSecret:          "sample-es-es-http-ca-internal",
+			InsecureSkipVerify: true,
+		},
+	}
+	err = plugin.WaitUntilElasticsearchReady(opt.SrcDmClient, params)
+	if err != nil {
+		return err
+	}
+
 	fmt.Println("Registering Repository in the destination Elasticsearch")
 	initResp, err = dstClient.Init(context.Background(), initParams)
 	if err != nil {
@@ -59,5 +66,5 @@ func (opt *PluginOptions) TriggerInit() error {
 	}
 	fmt.Println(initResp)
 
-	return nil
+	return plugin.WaitUntilElasticsearchReady(opt.DstDmClient, params)
 }

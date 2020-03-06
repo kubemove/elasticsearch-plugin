@@ -23,9 +23,10 @@ spec:
       scheme: http
       credentials: minio-credentials
     elasticsearch:
+      name: sample-es
+      namespace: default
       serviceName: sample-es-es-http
       port: 9200
-      namespace: default
       scheme: https
       authSecret: sample-es-es-elastic-user
       tlsSecret: sample-es-es-http-ca-internal
