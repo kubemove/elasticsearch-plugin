@@ -7,7 +7,6 @@ import (
 	"github.com/kubemove/elasticsearch-plugin/pkg/util"
 	"github.com/spf13/cobra"
 
-	"github.com/appscode/go/crypto/rand"
 	"github.com/kubemove/elasticsearch-plugin/pkg/plugin"
 	framework "github.com/kubemove/kubemove/pkg/plugin/ddm/plugin"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
@@ -52,7 +51,7 @@ func cmdStart() *cobra.Command {
 				utilruntime.Must(err)
 			}
 
-			return framework.Register(rand.WithUniqSuffix("eck-plugin"), //TODO: Use stable name. Need fix in the server side.
+			return framework.Register("elasticsearch-plugin",
 				&plugin.ElasticsearchDDM{
 					Log:       log,
 					K8sClient: kubernetes.NewForConfigOrDie(config),

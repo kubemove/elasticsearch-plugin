@@ -4,13 +4,10 @@ metadata:
   name: sample-es-move
 spec:
   movePair: demo-move-pair
-  namespace: ns1
-  remoteNamespace: ns2
-  syncPeriod: "30 * * * *"
+  namespace: default
+  remoteNamespace: default
+  syncPeriod: "3 * * * *"
   plugin: elasticsearch-plugin
-  selectors:
-    matchLabels:
-      name: sample-es
   includeResources: false
   mode: ${MODE}
   pluginParameters:
