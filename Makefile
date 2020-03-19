@@ -211,6 +211,21 @@ install-plugin:
 	@echo "Installing Elasticsearch Plugin into the destination cluster...."
 	@cat deploy/plugin.yaml | envsubst | kubectl apply -f - --context=$(DST_CONTEXT)
 
+.PHONY: uninstall-plugin #TODO: remove moveengine and datasync controller removal part
+uninstall-plugin:
+	@echo " "
+	@kubectl delete -f deploy/plugin.yaml --context=$(SRC_CONTEXT)
+	@kubectl delete -f deploy/plugin.yaml --context=$(DST_CONTEXT)
+
+# Install Elasticsearch Plugin in source and destination cluster
+# Example: make install-plugin
+.PHONY: reinstall-plugin
+reinstall-plugin: uninstall-plugin install-plugin
+	@kubectl delete pods -n kubemove --all --context=${SRC_CONTEXT}
+	@kubectl delete pods -n kubemove --all --context=${DST_CONTEXT}
+	@kubectl wait --for=condition=READY pods --all --timeout=5m --context=${SRC_CONTEXT} || true
+	@kubectl wait --for=condition=READY pods --all --timeout=5m --context=${DST_CONTEXT} || true
+
 # Deploy Elasticsearch Plugin in source and destination cluster
 # Example: make deploy-es
 .PHONY: deploy-es
@@ -220,6 +235,19 @@ deploy-es:
 	@cat deploy/elasticsearch.yaml | kubectl apply -f - --context=$(SRC_CONTEXT)
 	@echo "Deploying sample Easticsearch into the destination cluster...."
 	@cat deploy/elasticsearch.yaml | kubectl apply -f - --context=$(DST_CONTEXT)
+
+.PHONY: remove-es
+remove-es:
+	@echo " "
+	@echo "Removing sample Easticsearch from the source cluster...."
+	@kubectl delete -f deploy/elasticsearch.yaml --context=$(SRC_CONTEXT)
+	@echo "Removing sample Easticsearch from the destination cluster...."
+	@kubectl delete -f deploy/elasticsearch.yaml --context=$(DST_CONTEXT)
+	@kubectl wait --for=condition=READY pods --all --timeout=5m --context=${SRC_CONTEXT} || true
+	@kubectl wait --for=condition=READY pods --all --timeout=5m --context=${DST_CONTEXT} || true
+
+.PHONY: redeploy-es
+redeploy-es: remove-es deploy-es
 
 # Create MoveEngine CR to sync data between two Elasticsearch
 # Example: make stup-sync

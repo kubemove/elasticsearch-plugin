@@ -34,7 +34,6 @@ import (
 	common "github.com/elastic/cloud-on-k8s/pkg/apis/common/v1"
 	eck "github.com/elastic/cloud-on-k8s/pkg/apis/elasticsearch/v1"
 	appsv1 "k8s.io/api/apps/v1"
-	kerr "k8s.io/apimachinery/pkg/api/errors"
 )
 
 const (
@@ -277,20 +276,13 @@ func WaitUntilElasticsearchReady(k8sClient kubernetes.Interface, dmClient dynami
 	fmt.Println("Waiting for Elaticsearch to be ready with the plugin-installer init-container.......")
 	err := wait.PollImmediate(5*time.Second, 10*time.Minute, func() (done bool, err error) {
 		es, err := getElasticsearch(dmClient, params)
-		if err == nil &&
-			es.Status.Phase == eck.ElasticsearchReadyPhase &&
-			es.Status.Health == eck.ElasticsearchGreenHealth {
-			patchApplied, err2 := checkPatchState(k8sClient, es)
-			if err2 != nil {
-				fmt.Println("Err: ", err2)
-				return true, err2
-			}
-			return patchApplied, nil
-		}
-		if !kerr.IsNotFound(err) {
+		if err != nil {
 			return true, err
 		}
-		return false, nil
+		if es.Status.Phase != eck.ElasticsearchReadyPhase {
+			return false, nil
+		}
+		return checkPatchState(k8sClient, es)
 	})
 
 	return err
@@ -330,7 +322,11 @@ func checkPatchState(k8sClient kubernetes.Interface, es *eck.Elasticsearch) (boo
 }
 
 func patchAppliedToPods(k8sClient kubernetes.Interface, s appsv1.StatefulSet) bool {
-	pods, err := k8sClient.CoreV1().Pods(s.Namespace).List(metav1.ListOptions{LabelSelector: s.Spec.Selector.String()})
+	selector, err := metav1.LabelSelectorAsSelector(s.Spec.Selector)
+	if err != nil {
+		return false
+	}
+	pods, err := k8sClient.CoreV1().Pods(s.Namespace).List(metav1.ListOptions{LabelSelector: selector.String()})
 	if err != nil {
 		return false
 	}
@@ -338,11 +334,10 @@ func patchAppliedToPods(k8sClient kubernetes.Interface, s appsv1.StatefulSet) bo
 		return false
 	}
 
-	allPodHasPluginInstaller := true
-	for _, pod := range pods.Items {
+	for i := range pods.Items {
 		hasPluginInstaller := false
-		if pod.Status.Phase == corev1.PodRunning {
-			for _, c := range pod.Spec.InitContainers {
+		if pods.Items[i].Status.Phase == corev1.PodRunning {
+			for _, c := range pods.Items[i].Spec.InitContainers {
 				if c.Name == ContainerPluginInstaller {
 					hasPluginInstaller = true
 					break
@@ -350,8 +345,8 @@ func patchAppliedToPods(k8sClient kubernetes.Interface, s appsv1.StatefulSet) bo
 			}
 		}
 		if !hasPluginInstaller {
-			allPodHasPluginInstaller = false
+			return false
 		}
 	}
-	return allPodHasPluginInstaller
+	return true
 }
