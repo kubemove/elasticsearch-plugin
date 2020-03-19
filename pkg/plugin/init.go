@@ -34,7 +34,7 @@ func (d *ElasticsearchDDM) Init(params map[string]string) error {
 	}
 
 	// inject s3-repository plugin installer in the Elasticsearch
-	err = insertMinioRepository(d.DmClient, pluginParameters)
+	err = insertMinioRepository(d.K8sClient, d.DmClient, pluginParameters)
 	if err != nil {
 		return err
 	}

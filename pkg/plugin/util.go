@@ -33,6 +33,7 @@ import (
 
 	common "github.com/elastic/cloud-on-k8s/pkg/apis/common/v1"
 	eck "github.com/elastic/cloud-on-k8s/pkg/apis/elasticsearch/v1"
+	appsv1 "k8s.io/api/apps/v1"
 	kerr "k8s.io/apimachinery/pkg/api/errors"
 )
 
@@ -47,6 +48,8 @@ const (
 	ElasticUser      = "elastic"
 	TLSCertKey       = "tls.crt"
 	KeySnapshotName  = "snapshotName"
+
+	ContainerPluginInstaller = "plugin-installer"
 )
 
 var esGVR = schema.GroupVersionResource{
@@ -225,7 +228,7 @@ func parseErrorCause(body io.ReadCloser) (*RootCause, error) {
 }
 
 // insertMinioRepository patches both source and destination Elasticsearches and inject s3-repository plugin installer init-container
-func insertMinioRepository(dmClient dynamic.Interface, params PluginParameters) error {
+func insertMinioRepository(k8sClient kubernetes.Interface, dmClient dynamic.Interface, params PluginParameters) error {
 	es, err := getElasticsearch(dmClient, params)
 	if err != nil {
 		return err
@@ -236,7 +239,7 @@ func insertMinioRepository(dmClient dynamic.Interface, params PluginParameters) 
 		Spec: corev1.PodSpec{
 			InitContainers: []corev1.Container{
 				{
-					Name: "install-plugins",
+					Name: ContainerPluginInstaller,
 					Command: []string{
 						"sh",
 						"-c",
@@ -247,7 +250,7 @@ func insertMinioRepository(dmClient dynamic.Interface, params PluginParameters) 
 		},
 	}
 
-	// insert minio credentiaals
+	// insert minio credentials
 	es.Spec.SecureSettings = []common.SecretSource{
 		{
 			SecretName: params.Repository.Credentials,
@@ -266,17 +269,19 @@ func insertMinioRepository(dmClient dynamic.Interface, params PluginParameters) 
 		return err
 	}
 
-	// give a delay for the ES phase to be updated
-	time.Sleep(10 * time.Second)
 	// wait for ES to be ready with the plugin installer
-	return WaitUntilElasticsearchReady(dmClient, params)
+	return WaitUntilElasticsearchReady(k8sClient, dmClient, params)
 }
 
-func WaitUntilElasticsearchReady(dmClient dynamic.Interface, params PluginParameters) error {
+func WaitUntilElasticsearchReady(k8sClient kubernetes.Interface, dmClient dynamic.Interface, params PluginParameters) error {
 	err := wait.PollImmediate(5*time.Second, 10*time.Minute, func() (done bool, err error) {
 		es, err := getElasticsearch(dmClient, params)
-		if err == nil {
-			return es.Status.Phase == eck.ElasticsearchReadyPhase, nil
+		if err == nil && es.Status.Phase == eck.ElasticsearchReadyPhase {
+			patchApplied, err2 := checkPatchState(k8sClient, es)
+			if err2 != nil {
+				return true, err
+			}
+			return patchApplied, nil
 		}
 		if !kerr.IsNotFound(err) {
 			return true, err
@@ -301,4 +306,45 @@ func getElasticsearch(dmClient dynamic.Interface, params PluginParameters) (*eck
 		return nil, err
 	}
 	return &es, nil
+}
+
+func checkPatchState(k8sClient kubernetes.Interface, es *eck.Elasticsearch) (bool, error) {
+	// Identify the respective StatefulSets
+	sts, err := k8sClient.AppsV1().StatefulSets(es.Namespace).List(metav1.ListOptions{})
+	if err != nil {
+		return false, err
+	}
+	for i := range sts.Items {
+		fmt.Println("StatefulSet: ", sts.Items[i].Name)
+		if metav1.IsControlledBy(&sts.Items[i], es) && patchAppliedToPods(k8sClient, sts.Items[i]) {
+			return true, nil
+		}
+	}
+	return false, fmt.Errorf("no StatefulSet found for Elasticsearch %s/%s", es.Namespace, es.Name)
+}
+
+func patchAppliedToPods(k8sClient kubernetes.Interface, s appsv1.StatefulSet) bool {
+	fmt.Printf("Checking patch status for StatefulSet: %s/%s", s.Namespace, s.Name)
+
+	pods, err := k8sClient.CoreV1().Pods(s.Namespace).List(metav1.ListOptions{LabelSelector: s.Spec.Selector.String()})
+	if err != nil {
+		return false
+	}
+	if len(pods.Items) != int(*s.Spec.Replicas) {
+		return false
+	}
+
+	allPodHasPluginInstaller := true
+	for _, pod := range pods.Items {
+		hasPluginInstaller := false
+		for _, c := range pod.Spec.InitContainers {
+			if c.Name == ContainerPluginInstaller {
+				hasPluginInstaller = true
+			}
+		}
+		if !hasPluginInstaller {
+			allPodHasPluginInstaller = false
+		}
+	}
+	return allPodHasPluginInstaller
 }
