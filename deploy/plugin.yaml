@@ -54,7 +54,7 @@ spec:
       containers:
       - name: elasticsearch-plugin
         image: ${PLUGIN_IMAGE}
-        imagePullPolicy: Always
+        imagePullPolicy: IfNotPresent
         args: ["start"]
         env:
         - name: WATCH_NAMESPACE

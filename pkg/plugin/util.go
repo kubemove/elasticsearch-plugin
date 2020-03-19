@@ -274,12 +274,16 @@ func insertMinioRepository(k8sClient kubernetes.Interface, dmClient dynamic.Inte
 }
 
 func WaitUntilElasticsearchReady(k8sClient kubernetes.Interface, dmClient dynamic.Interface, params PluginParameters) error {
+	fmt.Println("Waiting for Elaticsearch to be ready with the plugin-installer init-container.......")
 	err := wait.PollImmediate(5*time.Second, 10*time.Minute, func() (done bool, err error) {
 		es, err := getElasticsearch(dmClient, params)
-		if err == nil && es.Status.Phase == eck.ElasticsearchReadyPhase {
+		if err == nil &&
+			es.Status.Phase == eck.ElasticsearchReadyPhase &&
+			es.Status.Health == eck.ElasticsearchGreenHealth {
 			patchApplied, err2 := checkPatchState(k8sClient, es)
 			if err2 != nil {
-				return true, err
+				fmt.Println("Err: ", err2)
+				return true, err2
 			}
 			return patchApplied, nil
 		}
@@ -314,18 +318,18 @@ func checkPatchState(k8sClient kubernetes.Interface, es *eck.Elasticsearch) (boo
 	if err != nil {
 		return false, err
 	}
+	if len(sts.Items) == 0 {
+		return false, fmt.Errorf("no StatefulSet found for Elasticsearch %s/%s", es.Namespace, es.Name)
+	}
 	for i := range sts.Items {
-		fmt.Println("StatefulSet: ", sts.Items[i].Name)
-		if metav1.IsControlledBy(&sts.Items[i], es) && patchAppliedToPods(k8sClient, sts.Items[i]) {
-			return true, nil
+		if metav1.IsControlledBy(&sts.Items[i], es) && !patchAppliedToPods(k8sClient, sts.Items[i]) {
+			return false, nil
 		}
 	}
-	return false, fmt.Errorf("no StatefulSet found for Elasticsearch %s/%s", es.Namespace, es.Name)
+	return true, nil
 }
 
 func patchAppliedToPods(k8sClient kubernetes.Interface, s appsv1.StatefulSet) bool {
-	fmt.Printf("Checking patch status for StatefulSet: %s/%s", s.Namespace, s.Name)
-
 	pods, err := k8sClient.CoreV1().Pods(s.Namespace).List(metav1.ListOptions{LabelSelector: s.Spec.Selector.String()})
 	if err != nil {
 		return false
@@ -337,9 +341,12 @@ func patchAppliedToPods(k8sClient kubernetes.Interface, s appsv1.StatefulSet) bo
 	allPodHasPluginInstaller := true
 	for _, pod := range pods.Items {
 		hasPluginInstaller := false
-		for _, c := range pod.Spec.InitContainers {
-			if c.Name == ContainerPluginInstaller {
-				hasPluginInstaller = true
+		if pod.Status.Phase == corev1.PodRunning {
+			for _, c := range pod.Spec.InitContainers {
+				if c.Name == ContainerPluginInstaller {
+					hasPluginInstaller = true
+					break
+				}
 			}
 		}
 		if !hasPluginInstaller {
