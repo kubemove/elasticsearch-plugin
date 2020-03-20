@@ -214,17 +214,17 @@ install-plugin:
 .PHONY: uninstall-plugin #TODO: remove moveengine and datasync controller removal part
 uninstall-plugin:
 	@echo " "
-	@kubectl delete -f deploy/plugin.yaml --context=$(SRC_CONTEXT)
-	@kubectl delete -f deploy/plugin.yaml --context=$(DST_CONTEXT)
+	@kubectl delete -f deploy/plugin.yaml --context=$(SRC_CONTEXT) || true
+	@kubectl delete -f deploy/plugin.yaml --context=$(DST_CONTEXT) || true
+	@kubectl delete pods -n kubemove --all --context=${SRC_CONTEXT}
+	@kubectl delete pods -n kubemove --all --context=${DST_CONTEXT}
+	@kubectl wait --for=condition=READY pods --all --timeout=5m --context=${SRC_CONTEXT} || true
+	@kubectl wait --for=condition=READY pods --all --timeout=5m --context=${DST_CONTEXT} || true
 
 # Install Elasticsearch Plugin in source and destination cluster
 # Example: make install-plugin
 .PHONY: reinstall-plugin
 reinstall-plugin: uninstall-plugin install-plugin
-	@kubectl delete pods -n kubemove --all --context=${SRC_CONTEXT}
-	@kubectl delete pods -n kubemove --all --context=${DST_CONTEXT}
-	@kubectl wait --for=condition=READY pods --all --timeout=5m --context=${SRC_CONTEXT} || true
-	@kubectl wait --for=condition=READY pods --all --timeout=5m --context=${DST_CONTEXT} || true
 
 # Deploy Elasticsearch Plugin in source and destination cluster
 # Example: make deploy-es
@@ -235,6 +235,8 @@ deploy-es:
 	@cat deploy/elasticsearch.yaml | kubectl apply -f - --context=$(SRC_CONTEXT)
 	@echo "Deploying sample Easticsearch into the destination cluster...."
 	@cat deploy/elasticsearch.yaml | kubectl apply -f - --context=$(DST_CONTEXT)
+	@kubectl wait --for=condition=READY pods sample-es-es-default-0 sample-es-es-default-1 --timeout=5m --context=$(SRC_CONTEXT)
+	@kubectl wait --for=condition=READY pods sample-es-es-default-0 sample-es-es-default-1 --timeout=5m --context=$(DST_CONTEXT)
 
 .PHONY: remove-es
 remove-es:
@@ -249,6 +251,14 @@ remove-es:
 .PHONY: redeploy-es
 redeploy-es: remove-es deploy-es
 
+.PHONY: deploy-es-operator
+deploy-es-operator:
+	@echo ""
+	@echo "Deploying ECK operator in the source cluster"
+	@kubectl apply -f https://download.elastic.co/downloads/eck/1.0.1/all-in-one.yaml --context=$(SRC_CONTEXT)
+	@echo ""
+	@echo "Deploying ECK operator in the destination cluster"
+	@kubectl apply -f https://download.elastic.co/downloads/eck/1.0.1/all-in-one.yaml --context=$(DST_CONTEXT)
 # Create MoveEngine CR to sync data between two Elasticsearch
 # Example: make stup-sync
 .PHONY: setup-sync

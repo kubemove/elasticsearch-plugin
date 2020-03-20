@@ -127,7 +127,7 @@ func cmdInsertIndexes() *cobra.Command {
 		Short:        "Insert an index into a Elasticsearch",
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return opt.TriggerInit()
+			return opt.InsertIndex()
 		},
 	}
 }
