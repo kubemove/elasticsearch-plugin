@@ -50,7 +50,7 @@ format: $(BUILD_DIRS)
 
 # Run linter
 # Example: make lint REGISTRY=<your docker registry>
-ADDITIONAL_LINTERS   := goconst,gofmt,goimports,unparam
+ADDITIONAL_LINTERS   := goconst,gofmt,goimports,unparam,misspell
 .PHONY: lint
 lint: $(BUILD_DIRS)
 	@echo "Running go lint....."
@@ -218,6 +218,7 @@ uninstall-plugin:
 	@kubectl delete -f deploy/plugin.yaml --context=$(DST_CONTEXT) || true
 	@kubectl delete pods -n kubemove --all --context=${SRC_CONTEXT}
 	@kubectl delete pods -n kubemove --all --context=${DST_CONTEXT}
+	@/bin/bash -c "sleep 10"
 	@kubectl wait --for=condition=READY pods --all --timeout=5m --context=${SRC_CONTEXT} || true
 	@kubectl wait --for=condition=READY pods --all --timeout=5m --context=${DST_CONTEXT} || true
 
@@ -235,6 +236,7 @@ deploy-es:
 	@cat deploy/elasticsearch.yaml | kubectl apply -f - --context=$(SRC_CONTEXT)
 	@echo "Deploying sample Easticsearch into the destination cluster...."
 	@cat deploy/elasticsearch.yaml | kubectl apply -f - --context=$(DST_CONTEXT)
+	@/bin/bash -c "sleep 10"
 	@kubectl wait --for=condition=READY pods sample-es-es-default-0 sample-es-es-default-1 --timeout=5m --context=$(SRC_CONTEXT)
 	@kubectl wait --for=condition=READY pods sample-es-es-default-0 sample-es-es-default-1 --timeout=5m --context=$(DST_CONTEXT)
 
@@ -245,6 +247,7 @@ remove-es:
 	@kubectl delete -f deploy/elasticsearch.yaml --context=$(SRC_CONTEXT)
 	@echo "Removing sample Easticsearch from the destination cluster...."
 	@kubectl delete -f deploy/elasticsearch.yaml --context=$(DST_CONTEXT)
+	@/bin/bash -c "sleep 10"
 	@kubectl wait --for=condition=READY pods --all --timeout=5m --context=${SRC_CONTEXT} || true
 	@kubectl wait --for=condition=READY pods --all --timeout=5m --context=${DST_CONTEXT} || true
 
@@ -259,6 +262,16 @@ deploy-es-operator:
 	@echo ""
 	@echo "Deploying ECK operator in the destination cluster"
 	@kubectl apply -f https://download.elastic.co/downloads/eck/1.0.1/all-in-one.yaml --context=$(DST_CONTEXT)
+
+.PHONY: remove-es-operator
+remove-es-operator:
+	@echo ""
+	@echo "Removing ECK operator in the source cluster"
+	@kubectl delete -f https://download.elastic.co/downloads/eck/1.0.1/all-in-one.yaml --context=$(SRC_CONTEXT) || true
+	@echo ""
+	@echo "Removing ECK operator in the destination cluster"
+	@kubectl delete -f https://download.elastic.co/downloads/eck/1.0.1/all-in-one.yaml --context=$(DST_CONTEXT) || true
+
 # Create MoveEngine CR to sync data between two Elasticsearch
 # Example: make stup-sync
 .PHONY: setup-sync
@@ -398,3 +411,10 @@ reset:
 				KUBECONFIG=$${KUBECONFIG#$(HOME)}                   \
 				./hack/reset.sh		                                \
 				"
+
+#
+#                echo "Creating demo bucket in the  Minio server...."                                                         && \
+#                $(eval MINIO_NODEPORT:=$(shell (kubectl get service minio -o yaml --context=$(DST_CONTEXT) | grep nodePort | cut -c15-)))     && \
+#                echo "${MINIO_NODEPORT}" &&\
+#                mc config host add es-repo http://$(DST_CLUSTER_IP):${MINIO_NODEPORT} $(MINIO_ACCESS_KEY) $(MINIO_SECRET_KEY)            && \
+#                mc mb es-repo/$(BUCKET_NAME)

@@ -2,14 +2,15 @@ apiVersion: kubemove.io/v1alpha1
 kind: MoveEngine
 metadata:
   name: sample-es-move
+  namespace: kubemove
 spec:
-  movePair: demo-move-pair
-  namespace: default
-  remoteNamespace: default
-  syncPeriod: "3 * * * *"
+  movePair: local
+  namespace: kubemove
+  remoteNamespace: kubemove
+  syncPeriod: "*/3 * * * *"
   plugin: elasticsearch-plugin
   includeResources: false
-  mode: ${MODE}
+  mode: active
   pluginParameters:
     repository:
       name: minio_repo
