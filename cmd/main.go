@@ -23,7 +23,11 @@ const (
 var opt util.PluginOptions
 
 func main() {
-	utilruntime.Must(rootCmd().Execute())
+	err := rootCmd().Execute()
+	if err != nil {
+		fmt.Printf("failed to execute command. Reason: %v", err.Error())
+	}
+	utilruntime.Must(err)
 }
 
 func rootCmd() *cobra.Command {
@@ -83,6 +87,8 @@ func cmdRun() *cobra.Command {
 	cmdRun.PersistentFlags().StringVar(&opt.DstContext, "dst-context", "", "Destination Context")
 	cmdRun.PersistentFlags().StringVar(&opt.SrcPluginAddress, "src-plugin", "", "URL of the source plugin")
 	cmdRun.PersistentFlags().StringVar(&opt.DstPluginAddress, "dst-plugin", "", "URL of the destination plugin")
+	cmdRun.PersistentFlags().StringVar(&opt.EsName, "es-name", "sample-es", "Name of the Elasticsearch")
+	cmdRun.PersistentFlags().StringVar(&opt.EsNamespace, "es-namespace", "default", "Namespace of the Elasticsearch")
 	cmdRun.PersistentFlags().StringVar(&opt.IndexName, "index-name", "test-index", "Name of the index to insert")
 	cmdRun.PersistentFlags().StringVar(&opt.IndexFrom, "index-from", "active", "Mode of targeted es")
 	cmdRun.PersistentFlags().StringVar(&opt.SrcClusterIp, "src-cluster-ip", "", "IP address of the source cluster")

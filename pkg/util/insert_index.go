@@ -9,7 +9,7 @@ import (
 
 // InsertIndex insert a index in the source Elasticsearch
 func (opt *PluginOptions) InsertIndex() error {
-	client, err := getESClient(opt.SrcKubeClient, opt.SrcClusterIp, int32(opt.SrcESNodePort))
+	client, err := getESClient(opt.SrcKubeClient, opt.SrcClusterIp, int32(opt.SrcESNodePort), opt.EsName, opt.EsNamespace)
 	if err != nil {
 		return err
 	}

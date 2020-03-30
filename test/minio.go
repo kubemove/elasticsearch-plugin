@@ -6,11 +6,27 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 
 	"github.com/appscode/go/types"
+	shell "github.com/codeskyblue/go-sh"
 	"github.com/kubemove/elasticsearch-plugin/pkg/util"
+	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
+)
+
+const (
+	DefaultStorageClass = "standard"
+	KeyMinioAccessKey   = "MINIO_ACCESS_KEY"
+	KeyMinioSecretKey   = "MINIO_SECRET_KEY"
+	KeyS3AccessKey      = "s3.client.default.access_key"
+	KeyS3SecretKey      = "s3.client.default.secret_key"
+	MinioAccessKey      = "not@accesskey"
+	MinioSecretKey      = "not@secretkey"
+	Minio               = "minio"
+	LabelApp            = "app"
+	MinioCredentialName = "minio-credentials"
+	DefaultNamespace    = "default"
 )
 
 func deployMinioServer(opt *util.PluginOptions) error {
@@ -37,12 +53,12 @@ func deployMinioServer(opt *util.PluginOptions) error {
 func createMinioSecret(opt *util.PluginOptions) (*corev1.Secret, error) {
 	secret := corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "minio-credentials",
-			Namespace: "default",
+			Name:      MinioCredentialName,
+			Namespace: DefaultNamespace,
 		},
 		StringData: map[string]string{
-			"s3.client.default.access_key": "not@accesskey",
-			"s3.client.default.secret_key": "not@secretkey",
+			KeyS3AccessKey: MinioAccessKey,
+			KeyS3SecretKey: MinioSecretKey,
 		},
 		Type: corev1.SecretTypeOpaque,
 	}
@@ -58,8 +74,8 @@ func createMinioSecret(opt *util.PluginOptions) (*corev1.Secret, error) {
 func createMinioService(opt *util.PluginOptions) (*corev1.Service, error) {
 	service := corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "minio",
-			Namespace: "default",
+			Name:      Minio,
+			Namespace: DefaultNamespace,
 		},
 		Spec: corev1.ServiceSpec{
 			Type: corev1.ServiceTypeNodePort,
@@ -71,7 +87,7 @@ func createMinioService(opt *util.PluginOptions) (*corev1.Service, error) {
 				},
 			},
 			Selector: map[string]string{
-				"app": "minio",
+				LabelApp: Minio,
 			},
 		},
 	}
@@ -83,7 +99,7 @@ func createMinioPVC(opt *util.PluginOptions) (*corev1.PersistentVolumeClaim, err
 	pvc := corev1.PersistentVolumeClaim{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "minio-pvc",
-			Namespace: "default",
+			Namespace: DefaultNamespace,
 		},
 		Spec: corev1.PersistentVolumeClaimSpec{
 			AccessModes: []corev1.PersistentVolumeAccessMode{
@@ -94,7 +110,7 @@ func createMinioPVC(opt *util.PluginOptions) (*corev1.PersistentVolumeClaim, err
 					corev1.ResourceName(corev1.ResourceStorage): resource.MustParse("2Gi"),
 				},
 			},
-			StorageClassName: types.StringP(StandardStorageClass),
+			StorageClassName: types.StringP(DefaultStorageClass),
 		},
 	}
 	fmt.Println("Creating PVC for Minio server in the destination cluster...")
@@ -104,20 +120,20 @@ func createMinioPVC(opt *util.PluginOptions) (*corev1.PersistentVolumeClaim, err
 func createMinioDeployment(opt *util.PluginOptions, secret *corev1.Secret, pvc *corev1.PersistentVolumeClaim) error {
 	dpl := appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "minio",
-			Namespace: "default",
+			Name:      Minio,
+			Namespace: DefaultNamespace,
 		},
 		Spec: appsv1.DeploymentSpec{
 			Replicas: types.Int32P(1),
 			Selector: &metav1.LabelSelector{
 				MatchLabels: map[string]string{
-					"app": "minio",
+					LabelApp: Minio,
 				},
 			},
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Labels: map[string]string{
-						"app": "minio",
+						LabelApp: Minio,
 					},
 				},
 				Spec: corev1.PodSpec{
@@ -128,24 +144,24 @@ func createMinioDeployment(opt *util.PluginOptions, secret *corev1.Secret, pvc *
 							Args:  []string{"server", "/storage"},
 							Env: []corev1.EnvVar{
 								{
-									Name: "MINIO_ACCESS_KEY",
+									Name: KeyMinioAccessKey,
 									ValueFrom: &corev1.EnvVarSource{
 										SecretKeyRef: &corev1.SecretKeySelector{
 											LocalObjectReference: corev1.LocalObjectReference{
 												Name: secret.Name,
 											},
-											Key: "s3.client.default.access_key",
+											Key: KeyS3AccessKey,
 										},
 									},
 								},
 								{
-									Name: "MINIO_SECRET_KEY",
+									Name: KeyMinioSecretKey,
 									ValueFrom: &corev1.EnvVarSource{
 										SecretKeyRef: &corev1.SecretKeySelector{
 											LocalObjectReference: corev1.LocalObjectReference{
 												Name: secret.Name,
 											},
-											Key: "s3.client.default.secret_key",
+											Key: KeyS3SecretKey,
 										},
 									},
 								},
@@ -179,32 +195,62 @@ func createMinioDeployment(opt *util.PluginOptions, secret *corev1.Secret, pvc *
 
 func removeMinioServer(opt *util.PluginOptions) error {
 	// Delete Minio Deployment
-	err := opt.DstKubeClient.AppsV1().Deployments("default").Delete("minio", &metav1.DeleteOptions{})
+	err := opt.DstKubeClient.AppsV1().Deployments(DefaultNamespace).Delete(Minio, &metav1.DeleteOptions{})
 	if err != nil {
 		return err
 	}
 	// Delete Minio PVC
-	err = opt.DstKubeClient.CoreV1().PersistentVolumeClaims("default").Delete("minio-pvc", &metav1.DeleteOptions{})
+	err = opt.DstKubeClient.CoreV1().PersistentVolumeClaims(DefaultNamespace).Delete("minio-pvc", &metav1.DeleteOptions{})
 	if err != nil {
 		return err
 	}
 
 	// Delete Minio Service
-	err = opt.DstKubeClient.CoreV1().Services("default").Delete("minio", &metav1.DeleteOptions{})
+	err = opt.DstKubeClient.CoreV1().Services(DefaultNamespace).Delete(Minio, &metav1.DeleteOptions{})
 	if err != nil {
 		return err
 	}
 
 	// Delete Minio Secret from the source cluster
-	err = opt.SrcKubeClient.CoreV1().Secrets("default").Delete("minio-credentials", &metav1.DeleteOptions{})
+	err = opt.SrcKubeClient.CoreV1().Secrets(DefaultNamespace).Delete(MinioCredentialName, &metav1.DeleteOptions{})
 	if err != nil {
 		return err
 	}
 	// Delete Minio Secret from the destination cluster
-	return opt.SrcKubeClient.CoreV1().Secrets("default").Delete("minio-credentials", &metav1.DeleteOptions{})
+	return opt.DstKubeClient.CoreV1().Secrets(DefaultNamespace).Delete(MinioCredentialName, &metav1.DeleteOptions{})
+}
+
+func (i *Invocation) EventuallyCreateMinioBucket() GomegaAsyncAssertion {
+	return Eventually(func() bool {
+		err := i.createMinioBucket()
+		if err != nil {
+			return false
+		}
+		return true
+	},
+		DefaultTimeout,
+		DefaultRetryInterval,
+	)
 }
 
 func (i *Invocation) createMinioBucket() error {
-	// TODO:
-	return nil
+	sh := shell.NewSession()
+	sh.ShowCMD = true
+	args := []interface{}{"config", "host", "add", "es-repo"}
+	args = append(args, fmt.Sprintf("http://%s", i.getMinioServerAddress()))
+	args = append(args, []interface{}{MinioAccessKey, MinioSecretKey})
+	err := sh.Command("mc", args).Run()
+	if err != nil {
+		return err
+	}
+
+	return sh.Command("mc", "mb", fmt.Sprintf("es-repo/%s", i.testID)).Run()
+}
+
+func (i *Invocation) getMinioServerAddress() string {
+	// Get Minio Service
+	svc, err := i.DstKubeClient.CoreV1().Services(DefaultNamespace).Get(Minio, metav1.GetOptions{})
+	Expect(err).NotTo(HaveOccurred())
+
+	return fmt.Sprintf("%s:%v", i.DstClusterIp, svc.Spec.Ports[0].NodePort)
 }

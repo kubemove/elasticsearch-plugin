@@ -1,6 +1,6 @@
 SHELL:=/bin/bash -o pipefail
 
-REGISTRY?=kubemovedev
+REGISTRY?=kubemove
 REPO_ROOT:=$(shell pwd)
 GO_VERSION?=1.13.8
 BUILD_IMAGE?= $(REGISTRY)/kubemove-dev:$(GO_VERSION)
@@ -130,51 +130,147 @@ plugin-image: build
 	@echo "Building Elasticsearch plugin docker image"
 	@docker build -t $(PLUGIN_IMAGE) -f build/Dockerfile ./build
 	@echo "Successfully built $(PLUGIN_IMAGE)"
+	@echo "Done"
+
+# Push docker images into docker registry
+# Example: make deploy-images REGISTRY=<your docker registry>
+.PHONY: deploy-images
+deploy-images:
 	@echo ""
 	@echo "Pushing $(PLUGIN_IMAGE) image...."
 	@docker push $(PLUGIN_IMAGE)
-
-
-# Update CRDs to latest version kubemove repo
-# Example: make update-crds ORG=<your username> BRANCH=<your branch>
-ORG?=kubemove
-BRANCH?=master
-CRD_SRC:=https://raw.githubusercontent.com/$(ORG)/kubemove/$(BRANCH)/deploy/crds/
-.PHONY: update-crds
-update-crds:
-	@echo "Updating CRD definition....."
-	@curl -fsSL $(CRD_SRC)/kubemove.io_datasyncs_crd.yaml    > deploy/dependencies/crds/kubemove.io_datasyncs_crd.yaml
-	@curl -fsSL $(CRD_SRC)/kubemove.io_moveengines_crd.yaml  > deploy/dependencies/crds/kubemove.io_moveengines_crd.yaml
-	@curl -fsSL $(CRD_SRC)/kubemove.io_movepairs_crd.yaml    > deploy/dependencies/crds/kubemove.io_movepairs_crd.yaml
-	@curl -fsSL $(CRD_SRC)/kubemove.io_movereverses_crd.yaml > deploy/dependencies/crds/kubemove.io_movereverses_crd.yaml
-	@curl -fsSL $(CRD_SRC)/kubemove.io_moveswitches_crd.yaml > deploy/dependencies/crds/kubemove.io_moveswitches_crd.yaml
 	@echo "Done"
 
-# Testing related Environments
+# Testing related Envs
 KUBECONFIG?=
 SRC_CONTEXT?=kind-src-cluster
 DST_CONTEXT?=kind-dst-cluster
 
-
 SRC_ES_NODE_PORT?=
 DST_ES_NODE_PORT?=
 
-SRC_CONTROL_PANE:=$(shell /bin/bash -c "kubectl get pod -n kube-system  -o name --context=$(SRC_CONTEXT)| grep kube-apiserver")
-SRC_CLUSTER_IP=$(shell (kubectl get -n kube-system $(SRC_CONTROL_PANE) -o yaml --context=$(SRC_CONTEXT)| grep advertise-address= | cut -c27-))
-DST_CONTROL_PANE:=$(shell /bin/bash -c "kubectl get pod -n kube-system  -o name --context=$(DST_CONTEXT)| grep kube-apiserver")
-DST_CLUSTER_IP=$(shell (kubectl get -n kube-system $(DST_CONTROL_PANE) -o yaml --context=$(DST_CONTEXT)| grep advertise-address= | cut -c27-))
+MINIO_ACCESS_KEY=not@accesskey
+MINIO_SECRET_KEY=not@secretkey
 
-export MINIO_ACCESS_KEY=not@id
-export MINIO_SECRET_KEY=not@secret
+SRC_CLUSTER_IP:=
+DST_CLUSTER_IP:=
 
+.PHONY: setup-envs
+setup-envs:
+	$(eval SRC_CONTROL_PANE:=$(shell /bin/bash -c "kubectl get pod -n kube-system  -o name --context=$(SRC_CONTEXT)| grep kube-apiserver"))
+	$(eval SRC_CLUSTER_IP=$(shell (kubectl get -n kube-system $(SRC_CONTROL_PANE) -o yaml --context=$(SRC_CONTEXT)| grep advertise-address= | cut -c27-)))
+	$(eval DST_CONTROL_PANE:=$(shell /bin/bash -c "kubectl get pod -n kube-system  -o name --context=$(DST_CONTEXT)| grep kube-apiserver"))
+	$(eval DST_CLUSTER_IP=$(shell (kubectl get -n kube-system $(DST_CONTROL_PANE) -o yaml --context=$(DST_CONTEXT)| grep advertise-address= | cut -c27-)))
+
+# Install Elasticsearch Plugin in source and destination cluster
+# Example: make install-plugin
+.PHONY: install-plugin
+install-plugin:
+	@echo ""
+	@echo "Installing Elasticsearch Plugin into the source cluster...."
+	@cat deploy/plugin.yaml | envsubst | kubectl apply -f - --context=$(SRC_CONTEXT)
+	@echo "Installing Elasticsearch Plugin into the destination cluster...."
+	@cat deploy/plugin.yaml | envsubst | kubectl apply -f - --context=$(DST_CONTEXT)
+	@echo "Done"
+
+# Uninstall Elasticsearch Plugin from the source and destination cluster
+# Example: make uninstall-plugin
+.PHONY: uninstall-plugin
+uninstall-plugin:
+	@echo " "
+	@kubectl delete -f deploy/plugin.yaml --context=$(SRC_CONTEXT) --wait=true || true
+	@kubectl delete -f deploy/plugin.yaml --context=$(DST_CONTEXT) --wait=true || true
+	@echo "Done"
+
+# Deploy ECK operator in the source and destination cluster
+# Example: make deploy-eck-operator
+.PHONY: deploy-eck-operator
+deploy-eck-operator:
+	@echo ""
+	@echo "Deploying ECK operator in the source cluster"
+	@kubectl apply -f https://download.elastic.co/downloads/eck/1.0.1/all-in-one.yaml --context=$(SRC_CONTEXT)
+	@echo ""
+	@echo "Deploying ECK operator in the destination cluster"
+	@kubectl apply -f https://download.elastic.co/downloads/eck/1.0.1/all-in-one.yaml --context=$(DST_CONTEXT)
+	@echo "Done"
+
+# Remove ECK operator from the source and destination cluster
+# Example: make remove-eck-oerator
+.PHONY: remove-eck-operator
+remove-eck-operator:
+	@echo ""
+	@echo "Removing ECK operator in the source cluster"
+	@kubectl delete -f https://download.elastic.co/downloads/eck/1.0.1/all-in-one.yaml --context=$(SRC_CONTEXT) --wait=true || true
+	@echo ""
+	@echo "Removing ECK operator in the destination cluster"
+	@kubectl delete -f https://download.elastic.co/downloads/eck/1.0.1/all-in-one.yaml --context=$(DST_CONTEXT) --wait=true || true
+	@echo "Done"
+
+# Deploy a sample Elasticsearch in the source and destination cluster
+# Example: make deploy-sample-es
+.PHONY: deploy-sample-es
+deploy-sample-es:
+	@echo " "
+	@echo "Deploying sample Easticsearch into the source cluster...."
+	@kubectl apply -f examples/elasticsearch/sample_es.yaml --context=$(SRC_CONTEXT)
+	@echo "Deploying sample Easticsearch into the destination cluster...."
+	@kubectl apply -f examples/elasticsearch/sample_es.yaml --context=$(DST_CONTEXT)
+	@/bin/bash -c "sleep 10"
+	@kubectl wait --for=condition=READY pods sample-es-es-default-0 sample-es-es-default-1 --timeout=10m --context=$(SRC_CONTEXT)
+	@kubectl wait --for=condition=READY pods sample-es-es-default-0 sample-es-es-default-1 --timeout=10m --context=$(DST_CONTEXT)
+	@echo "Done"
+
+# Remove the sample Elasticsearch from the source and destination cluster
+# Example: make remove-sample-es
+.PHONY: remove-sample-es
+remove-sample-es:
+	@echo " "
+	@echo "Removing sample Easticsearch from the source cluster...."
+	@kubectl delete -f examples/elasticsearch/sample_es.yaml --context=$(SRC_CONTEXT) --wait=true || true
+	@echo "Removing sample Easticsearch from the destination cluster...."
+	@kubectl delete -f examples/elasticsearch/sample_es.yaml --context=$(DST_CONTEXT) --wait=true || true
+	@echo "Done"
+
+# Deploy a Minio server in the destination cluster
+# Example: make deploy-minio-server
+.PHONY: deploy-minio-server
+deploy-minio-server:
+	@echo ""
+	@echo "Creating Minio secret into the source cluster...."
+	@cat examples/repository/minio_secret.yaml | \
+		MINIO_ACCESS_KEY=$(MINIO_ACCESS_KEY)     \
+		MINIO_SECRET_KEY=$(MINIO_SECRET_KEY)     \
+		envsubst | kubectl apply -f - --context=$(SRC_CONTEXT)
+	@echo "Creating Minio secret into the destination cluster...."
+	@cat examples/repository/minio_secret.yaml | \
+		MINIO_ACCESS_KEY=$(MINIO_ACCESS_KEY)     \
+		MINIO_SECRET_KEY=$(MINIO_SECRET_KEY)     \
+    	envsubst | kubectl apply -f - --context=$(DST_CONTEXT)
+	@echo "Deploying Minio server into the destination cluster...."
+	@cat examples/repository/minio_server.yaml | envsubst | kubectl apply -f - --context=$(DST_CONTEXT)
+	@echo "Done"
+
+# Remove the Minio server and its associated resources
+# Example: make remove-minio-server
+.PHONY: remove-minio-server
+remove-minio-server:
+	@echo ""
+	@echo "Removing Minio server from the destination cluster...."
+	@kubectl delete -f examples/repository/minio_server.yaml --context=$(DST_CONTEXT) --wait=true || true
+	@echo " Deleting Minio secret from the source cluster...."
+	@kubectl delete -f examples/repository/minio_secret.yaml --context=$(SRC_CONTEXT) || true
+	@echo " Deleting Minio secret from the destination cluster...."
+	@kubectl delete -f examples/repository/minio_secret.yaml --context=$(DST_CONTEXT) || true
+	@echo "Done"
 
 MINO_NODEPORT=
 MINIO_SERVER_ADDRESS=
-
-# Install all dependencies for testing
-# Example: make prepare REGISTRY=<your docker registry> KUBECONFIG=<kubeconfig path> SRC_CONTEXT=<source context> DST_CONTEXT=<destination context>
-.PHONY: prepare
-prepare: plugin-image
+BUCKET_NAME=demo
+.PHONY: create-minio-bucket
+create-minio-bucket: setup-envs
+	@echo " "
+	$(eval MINIO_NODEPORT:=$(shell (kubectl get service minio -o yaml --context=$(DST_CONTEXT) | grep nodePort | cut -c15-)))
+	$(eval MINIO_SERVER_ADDRESS:=$(DST_CLUSTER_IP):$(MINIO_NODEPORT))
 	@docker run                                                     \
 			-i                                                      \
 			--rm                                                    \
@@ -187,109 +283,37 @@ prepare: plugin-image
 			-w /go/src/$(MODULE)                                    \
 			--env HTTP_PROXY=$(HTTP_PROXY)                          \
 			--env HTTPS_PROXY=$(HTTPS_PROXY)                        \
-			--env KUBECONFIG=$(KUBECONFIG)                          \
-			--env GO111MODULE=on                                    \
-			--env GOFLAGS="-mod=vendor"                             \
-			--env REGISTRY=$(REGISTRY)                              \
-			--env MINIO_ACCESS_KEY=$(MINIO_ACCESS_KEY) 				\
-			--env MINIO_SECRET_KEY=$(MINIO_SECRET_KEY) 				\
-			--env SRC_CONTEXT=$(SRC_CONTEXT)                        \
-			--env DST_CONTEXT=$(DST_CONTEXT)                        \
+			--env GINKGO_ARGS=$(GINKGO_ARGS)                        \
 			$(BUILD_IMAGE)                                          \
 			/bin/bash -c "                                          \
-				KUBECONFIG=$${KUBECONFIG#$(HOME)}                   \
-				./hack/prepare.sh		                            \
-				"
+				mc config host add es-repo http://$(MINIO_SERVER_ADDRESS) $(MINIO_ACCESS_KEY) $(MINIO_SECRET_KEY) && \
+				mc mb es-repo/$(BUCKET_NAME) 																		 \
+			"
 
-# Install Elasticsearch Plugin in source and destination cluster
-# Example: make install-plugin
-.PHONY: install-plugin
-install-plugin:
-	@echo " "
-	@echo "Installing Elasticsearch Plugin into the source cluster...."
-	@cat deploy/plugin.yaml | envsubst | kubectl apply -f - --context=$(SRC_CONTEXT)
-	@echo "Installing Elasticsearch Plugin into the destination cluster...."
-	@cat deploy/plugin.yaml | envsubst | kubectl apply -f - --context=$(DST_CONTEXT)
-
-.PHONY: uninstall-plugin #TODO: remove moveengine and datasync controller removal part
-uninstall-plugin:
-	@echo " "
-	@kubectl delete -f deploy/plugin.yaml --context=$(SRC_CONTEXT) || true
-	@kubectl delete -f deploy/plugin.yaml --context=$(DST_CONTEXT) || true
-	@kubectl delete pods -n kubemove --all --context=${SRC_CONTEXT}
-	@kubectl delete pods -n kubemove --all --context=${DST_CONTEXT}
-	@/bin/bash -c "sleep 10"
-	@kubectl wait --for=condition=READY pods --all --timeout=5m --context=${SRC_CONTEXT} || true
-	@kubectl wait --for=condition=READY pods --all --timeout=5m --context=${DST_CONTEXT} || true
-
-# Install Elasticsearch Plugin in source and destination cluster
-# Example: make install-plugin
-.PHONY: reinstall-plugin
-reinstall-plugin: uninstall-plugin install-plugin
-
-# Deploy Elasticsearch Plugin in source and destination cluster
-# Example: make deploy-es
-.PHONY: deploy-es
-deploy-es:
-	@echo " "
-	@echo "Deploying sample Easticsearch into the source cluster...."
-	@cat deploy/elasticsearch.yaml | kubectl apply -f - --context=$(SRC_CONTEXT)
-	@echo "Deploying sample Easticsearch into the destination cluster...."
-	@cat deploy/elasticsearch.yaml | kubectl apply -f - --context=$(DST_CONTEXT)
-	@/bin/bash -c "sleep 10"
-	@kubectl wait --for=condition=READY pods sample-es-es-default-0 sample-es-es-default-1 --timeout=5m --context=$(SRC_CONTEXT)
-	@kubectl wait --for=condition=READY pods sample-es-es-default-0 sample-es-es-default-1 --timeout=5m --context=$(DST_CONTEXT)
-
-.PHONY: remove-es
-remove-es:
-	@echo " "
-	@echo "Removing sample Easticsearch from the source cluster...."
-	@kubectl delete -f deploy/elasticsearch.yaml --context=$(SRC_CONTEXT)
-	@echo "Removing sample Easticsearch from the destination cluster...."
-	@kubectl delete -f deploy/elasticsearch.yaml --context=$(DST_CONTEXT)
-	@/bin/bash -c "sleep 10"
-	@kubectl wait --for=condition=READY pods --all --timeout=5m --context=${SRC_CONTEXT} || true
-	@kubectl wait --for=condition=READY pods --all --timeout=5m --context=${DST_CONTEXT} || true
-
-.PHONY: redeploy-es
-redeploy-es: remove-es deploy-es
-
-.PHONY: deploy-es-operator
-deploy-es-operator:
-	@echo ""
-	@echo "Deploying ECK operator in the source cluster"
-	@kubectl apply -f https://download.elastic.co/downloads/eck/1.0.1/all-in-one.yaml --context=$(SRC_CONTEXT)
-	@echo ""
-	@echo "Deploying ECK operator in the destination cluster"
-	@kubectl apply -f https://download.elastic.co/downloads/eck/1.0.1/all-in-one.yaml --context=$(DST_CONTEXT)
-
-.PHONY: remove-es-operator
-remove-es-operator:
-	@echo ""
-	@echo "Removing ECK operator in the source cluster"
-	@kubectl delete -f https://download.elastic.co/downloads/eck/1.0.1/all-in-one.yaml --context=$(SRC_CONTEXT) || true
-	@echo ""
-	@echo "Removing ECK operator in the destination cluster"
-	@kubectl delete -f https://download.elastic.co/downloads/eck/1.0.1/all-in-one.yaml --context=$(DST_CONTEXT) || true
-
-# Create MoveEngine CR to sync data between two Elasticsearch
-# Example: make stup-sync
-.PHONY: setup-sync
-setup-sync:
+# Create MoveEngine CR to sync data between two sample Elasticsearch
+# Example: make setup-sample-es-sync
+.PHONY: setup-sample-es-sync
+setup-sample-es-sync: setup-envs
 	@echo " "
 	$(eval MINIO_NODEPORT:=$(shell (kubectl get service minio -o yaml --context=$(DST_CONTEXT) | grep nodePort | cut -c15-)))
 	$(eval MINIO_SERVER_ADDRESS:=$(DST_CLUSTER_IP):$(MINIO_NODEPORT))
 
 	@echo "Creating MoveEngine CR into the source cluster...."
-	@cat deploy/moveengine.yaml |                                    \
-		MODE=active                                                  \
+	@cat examples/moveengine/sample_es_move.yaml |                   \
 		MINIO_SERVER_ADDRESS=$(MINIO_SERVER_ADDRESS)                 \
 		envsubst | kubectl apply -f - --context=$(SRC_CONTEXT)
-	@echo "Creating MoveEngine CR into the destination cluster...."
-	@cat deploy/moveengine.yaml |                                    \
-		MODE=standby                                                 \
-		MINIO_SERVER_ADDRESS=$(MINIO_SERVER_ADDRESS)                 \
-		envsubst | kubectl apply -f - --context=$(DST_CONTEXT)
+	@echo "Done"
+
+# Create MoveEngine CR to sync data between two sample Elasticsearch
+# Example: make remove-sample-es-sync
+.PHONY: remove-sample-es-sync
+remove-sample-es-sync:
+	@echo ""
+	@echo "Removing MoveEngine CR from the source cluster...."
+	@kubectl delete -f examples/moveengine/sample_es_move.yaml --context=$(SRC_CONTEXT) || true
+	@echo "Removing MoveEngine CR from the destination cluster...."
+	@kubectl delete -f examples/moveengine/sample_es_move.yaml --context=$(DST_CONTEXT) || true
+	@echo "Done"
 
 # Trigger INIT API
 #Example: make trigger-init
@@ -325,6 +349,8 @@ trigger-sync:
 
 # Insert a index in the source cluster
 # Example: make insert-index INDEX_NAME=my-index
+ES_NAME?=sample-es
+ES_NAMESPACE=default
 INDEX_NAME?=test-index
 .PHONY: insert-index
 insert-index:
@@ -339,6 +365,8 @@ insert-index:
 		--dst-cluster-ip=$(DST_SRC_CLUSTER_IP)       \
 		--src-es-nodeport=$(SRC_ES_NODEPORT)         \
 		--dst-es-nodeport=$(DST_ES_NODEPORT)         \
+		--es-name=$(ES_NAME)                         \
+		--es-namespace=$(ES_NAMESPACE)               \
 		--index-name=$(INDEX_NAME)
 
 # Show all indexes from the targeted ES
@@ -358,6 +386,8 @@ show-indexes:
 		--dst-cluster-ip=$(DST_CLUSTER_IP)           \
 		--src-es-nodeport=$(SRC_ES_NODEPORT)         \
 		--dst-es-nodeport=$(DST_ES_NODEPORT)         \
+		--es-name=$(ES_NAME)                         \
+        --es-namespace=$(ES_NAMESPACE)               \
 		--index-from=$(FROM)
 
 # Run E2E tests.
@@ -388,33 +418,3 @@ e2e-test:
 				KUBECONFIG=$${KUBECONFIG#$(HOME)}                   \
 				./hack/e2e-test.sh		                            \
 				"
-
-# Remove all the resources installed for testing this plugin
-# Example: make reset
-reset:
-	@docker run                                                     \
-			-i                                                      \
-			--rm                                                    \
-			--net=host                                              \
-			-u $$(id -u):$$(id -g)                                  \
-			-v $$(pwd):/go/src/$(MODULE)                            \
-			-v $(HOME)/.kube:/.kube                                 \
-			-w /go/src/$(MODULE)                                    \
-			--env HTTP_PROXY=$(HTTP_PROXY)                          \
-			--env HTTPS_PROXY=$(HTTPS_PROXY)                        \
-			--env KUBECONFIG=$(KUBECONFIG)                          \
-			--env SRC_CONTEXT=$(SRC_CONTEXT)                        \
-			--env DST_CONTEXT=$(DST_CONTEXT)                        \
-			$(BUILD_IMAGE)                                          \
-			/bin/bash -c "                                          \
-				DOCKER_REGISTRY=$(REGISTRY)                         \
-				KUBECONFIG=$${KUBECONFIG#$(HOME)}                   \
-				./hack/reset.sh		                                \
-				"
-
-#
-#                echo "Creating demo bucket in the  Minio server...."                                                         && \
-#                $(eval MINIO_NODEPORT:=$(shell (kubectl get service minio -o yaml --context=$(DST_CONTEXT) | grep nodePort | cut -c15-)))     && \
-#                echo "${MINIO_NODEPORT}" &&\
-#                mc config host add es-repo http://$(DST_CLUSTER_IP):${MINIO_NODEPORT} $(MINIO_ACCESS_KEY) $(MINIO_SECRET_KEY)            && \
-#                mc mb es-repo/$(BUCKET_NAME)

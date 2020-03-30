@@ -1,8 +1,15 @@
 package test
 
 import (
+	"time"
+
 	"github.com/appscode/go/crypto/rand"
 	"github.com/kubemove/elasticsearch-plugin/pkg/util"
+)
+
+const (
+	DefaultTimeout       = 10 * time.Minute
+	DefaultRetryInterval = 2 * time.Second
 )
 
 type Invocation struct {
@@ -13,6 +20,6 @@ type Invocation struct {
 func NewInvocation(opt *util.PluginOptions) Invocation {
 	return Invocation{
 		PluginOptions: opt,
-		testID: rand.WithUniqSuffix("e2e"),
+		testID:        rand.WithUniqSuffix("e2e"),
 	}
 }

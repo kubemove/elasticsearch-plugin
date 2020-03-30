@@ -4,6 +4,7 @@ go 1.13
 
 require (
 	github.com/appscode/go v0.0.0-20200225060711-86360b91102a
+	github.com/codeskyblue/go-sh v0.0.0-20190412065543-76bd3d59ff27
 	github.com/elastic/cloud-on-k8s v0.0.0-20200227085127-963e594a6b97
 	github.com/elastic/go-elasticsearch/v7 v7.6.0
 	github.com/go-logr/logr v0.1.0
@@ -40,4 +41,5 @@ replace (
 	k8s.io/legacy-cloud-providers => k8s.io/legacy-cloud-providers v0.0.0-20190918203421-225f0541b3ea
 	k8s.io/metrics => k8s.io/metrics v0.0.0-20190918202012-3c1ca76f5bda
 	k8s.io/sample-apiserver => k8s.io/sample-apiserver v0.0.0-20190918201353-5cc279503896
+	sigs.k8s.io/controller-runtime => sigs.k8s.io/controller-runtime v0.3.0
 )

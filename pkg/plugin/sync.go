@@ -5,14 +5,12 @@ import (
 	"fmt"
 	"net/http"
 
-	framework "github.com/kubemove/kubemove/pkg/plugin/ddm/plugin"
-
 	"k8s.io/client-go/kubernetes"
 
 	"github.com/elastic/go-elasticsearch/v7/esapi"
 )
 
-func (d *ElasticsearchDDM) Sync(params map[string]string, vol []*framework.Volume) (string, error) {
+func (d *ElasticsearchDDM) Sync(params map[string]string) (string, error) {
 	fmt.Println("\nHandling SYNC request..................")
 	// extract the plugin parameters from the respective MoveEngine
 	pluginParameters, mode, err := extractPluginParameters(d.DmClient, params)

@@ -51,7 +51,7 @@ const (
 	ContainerPluginInstaller = "plugin-installer"
 )
 
-var esGVR = schema.GroupVersionResource{
+var ESGVR = schema.GroupVersionResource{
 	Group:    "elasticsearch.k8s.elastic.co",
 	Version:  "v1",
 	Resource: "elasticsearches",
@@ -263,7 +263,7 @@ func insertMinioRepository(k8sClient kubernetes.Interface, dmClient dynamic.Inte
 	}
 
 	// update Elasticsearch
-	_, err = dmClient.Resource(esGVR).Namespace(params.Elasticsearch.Namespace).Update(&unstructured.Unstructured{Object: updatedES}, metav1.UpdateOptions{})
+	_, err = dmClient.Resource(ESGVR).Namespace(params.Elasticsearch.Namespace).Update(&unstructured.Unstructured{Object: updatedES}, metav1.UpdateOptions{})
 	if err != nil {
 		return err
 	}
@@ -274,7 +274,7 @@ func insertMinioRepository(k8sClient kubernetes.Interface, dmClient dynamic.Inte
 
 func WaitUntilElasticsearchReady(k8sClient kubernetes.Interface, dmClient dynamic.Interface, params PluginParameters) error {
 	fmt.Println("Waiting for Elaticsearch to be ready with the plugin-installer init-container.......")
-	err := wait.PollImmediate(5*time.Second, 10*time.Minute, func() (done bool, err error) {
+	err := wait.PollImmediate(5*time.Second, 20*time.Minute, func() (done bool, err error) {
 		es, err := getElasticsearch(dmClient, params)
 		if err != nil {
 			return true, err
@@ -290,7 +290,7 @@ func WaitUntilElasticsearchReady(k8sClient kubernetes.Interface, dmClient dynami
 
 func getElasticsearch(dmClient dynamic.Interface, params PluginParameters) (*eck.Elasticsearch, error) {
 	// read Elasticsearch object
-	resp, err := dmClient.Resource(esGVR).Namespace(params.Elasticsearch.Namespace).Get(params.Elasticsearch.Name, metav1.GetOptions{})
+	resp, err := dmClient.Resource(ESGVR).Namespace(params.Elasticsearch.Namespace).Get(params.Elasticsearch.Name, metav1.GetOptions{})
 	if err != nil {
 		return nil, err
 	}

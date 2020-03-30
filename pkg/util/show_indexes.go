@@ -28,7 +28,7 @@ func (opt *PluginOptions) ShowIndexes() (string, error) {
 		kubeClient = opt.DstKubeClient
 	}
 
-	client, err := getESClient(kubeClient, address, int32(port))
+	client, err := getESClient(kubeClient, address, int32(port), opt.EsName, opt.EsNamespace)
 	if err != nil {
 		return "", err
 	}

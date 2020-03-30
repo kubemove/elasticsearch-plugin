@@ -1,6 +1,7 @@
 package plugin
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -107,6 +108,11 @@ func retrieveBackupState(k8sClient kubernetes.Interface, params PluginParameters
 		return framework.Errored, err
 	}
 
+	if len(bytes.TrimSpace(data)) == 0 {
+		// Nothing to backup
+		return framework.Completed, nil // TODO: should we fail?
+	}
+
 	err = json.Unmarshal(data, &statusResponse)
 	if err != nil {
 		return framework.Errored, err
@@ -168,6 +174,11 @@ func retrieveRestoreState(k8sClient kubernetes.Interface, params PluginParameter
 	data, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		return framework.Errored, err
+	}
+
+	if len(bytes.TrimSpace(data)) == 0 {
+		// Nothing to recover
+		return framework.Completed, nil // TODO: should we fail?
 	}
 
 	err = json.Unmarshal(data, &recoveryStats)

@@ -1,6 +1,7 @@
 package util
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 
@@ -20,18 +21,22 @@ type PluginOptions struct {
 	DstContext       string
 	SrcPluginAddress string
 	DstPluginAddress string
-	IndexName        string
-	IndexFrom        string
 	SrcClusterIp     string
 	DstClusterIp     string
 	SrcESNodePort    int64
 	DstESNodePort    int64
-	Debug            bool
+
+	IndexName   string
+	IndexFrom   string
+	EsName      string
+	EsNamespace string
 
 	SrcKubeClient kubernetes.Interface
 	DstKubeClient kubernetes.Interface
 	SrcDmClient   dynamic.Interface
 	DstDmClient   dynamic.Interface
+
+	Debug bool
 }
 
 func (opt *PluginOptions) Setup() error {
@@ -75,14 +80,14 @@ func (opt *PluginOptions) Setup() error {
 	return nil
 }
 
-func getESClient(kubeClient kubernetes.Interface, address string, port int32) (*elasticsearch.Client, error) {
+func getESClient(kubeClient kubernetes.Interface, address string, port int32, esName, esNamespace string) (*elasticsearch.Client, error) {
 	return esPlugin.NewElasticsearchClient(kubeClient, esPlugin.ElasticsearchOptions{
 		ServiceName:        address,
-		Namespace:          "default",
+		Namespace:          esNamespace,
 		Scheme:             "https",
 		Port:               port,
-		AuthSecret:         "sample-es-es-elastic-user",
-		TLSSecret:          "sample-es-es-http-ca-internal",
+		AuthSecret:         fmt.Sprintf("%s-es-elastic-user", esName),
+		TLSSecret:          fmt.Sprintf("%s-es-http-ca-internal", esName),
 		InsecureSkipVerify: true,
 	})
 }
