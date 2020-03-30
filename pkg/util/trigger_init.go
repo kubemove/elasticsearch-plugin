@@ -54,7 +54,7 @@ func (opt *PluginOptions) TriggerInit() error {
 			InsecureSkipVerify: true,
 		},
 	}
-	err = plugin.WaitUntilElasticsearchReady(opt.SrcKubeClient, opt.SrcDmClient, params)
+	err = plugin.WaitUntilElasticsearchReady(opt.SrcKubeClient, opt.SrcDmClient, params,true)
 	if err != nil {
 		return err
 	}
@@ -66,5 +66,5 @@ func (opt *PluginOptions) TriggerInit() error {
 	}
 	fmt.Println(initResp)
 
-	return plugin.WaitUntilElasticsearchReady(opt.DstKubeClient, opt.DstDmClient, params)
+	return plugin.WaitUntilElasticsearchReady(opt.DstKubeClient, opt.DstDmClient, params,true)
 }

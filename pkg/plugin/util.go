@@ -269,11 +269,11 @@ func insertMinioRepository(k8sClient kubernetes.Interface, dmClient dynamic.Inte
 	}
 
 	// wait for ES to be ready with the plugin installer
-	return WaitUntilElasticsearchReady(k8sClient, dmClient, params)
+	return WaitUntilElasticsearchReady(k8sClient, dmClient, params, true)
 }
 
-func WaitUntilElasticsearchReady(k8sClient kubernetes.Interface, dmClient dynamic.Interface, params PluginParameters) error {
-	fmt.Println("Waiting for Elaticsearch to be ready with the plugin-installer init-container.......")
+func WaitUntilElasticsearchReady(k8sClient kubernetes.Interface, dmClient dynamic.Interface, params PluginParameters, waitForInitContainer bool) error {
+	fmt.Println("Waiting for Elaticsearch to be ready .......")
 	err := wait.PollImmediate(5*time.Second, 20*time.Minute, func() (done bool, err error) {
 		es, err := getElasticsearch(dmClient, params)
 		if err != nil {
@@ -282,7 +282,11 @@ func WaitUntilElasticsearchReady(k8sClient kubernetes.Interface, dmClient dynami
 		if es.Status.Phase != eck.ElasticsearchReadyPhase {
 			return false, nil
 		}
-		return checkPatchState(k8sClient, es)
+
+		if waitForInitContainer {
+			return checkPatchState(k8sClient, es)
+		}
+		return true, nil
 	})
 
 	return err

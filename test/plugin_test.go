@@ -57,17 +57,18 @@ var _ = Describe("Elasticsearch Plugin Test", func() {
 	Context("Minio Repository", func() {
 		BeforeEach(func() {
 			By("Creating bucket: " + i.testID)
-			err := i.createMinioBucket()
-			Expect(err).NotTo(HaveOccurred())
+			i.EventuallyCreateMinioBucket().Should(BeTrue())
 		})
 
 		Context("Default Nodes", func() {
 			It("should sync ES data between clusters", func() {
 				By("Creating sample Elasticsearch")
-				es := newDefaultElasticsearch()
+				es := i.newDefaultElasticsearch()
 				err := i.createElasticsearch(es)
 				Expect(err).NotTo(HaveOccurred())
 
+				opt.EsName = es.Name
+				opt.EsNamespace = es.Namespace
 				By("Creating a sample index in the source ES")
 				opt.IndexName = rand.WithUniqSuffix("e2e-demo")
 				err = opt.InsertIndex()
@@ -106,6 +107,21 @@ var _ = Describe("Elasticsearch Plugin Test", func() {
 				Expect(err).NotTo(HaveOccurred())
 				Expect(strings.Contains(resp, opt.IndexName)).Should(BeTrue())
 			})
+		})
+
+		AfterEach(func() {
+			By("Deleting Elasticsearch.....")
+			err:=i.deleteElasticsearch()
+			Expect(err).NotTo(HaveOccurred())
+
+			By("Deleting MoveEngine")
+			err=i.deleteMoveEngine()
+			Expect(err).NotTo(HaveOccurred())
+
+			By("Deleting DataSync CRs......")
+			err=i.deleteDataSync()
+			Expect(err).NotTo(HaveOccurred())
+
 		})
 	})
 })

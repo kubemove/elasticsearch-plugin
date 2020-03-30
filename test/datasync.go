@@ -64,3 +64,33 @@ func listDataSyncs(dmClient dynamic.Interface, meta metav1.ObjectMeta) (*v1alpha
 	}
 	return dataSyncs, nil
 }
+
+func (i *Invocation) deleteDataSync() error {
+	// Delete DataSyncs from source cluster
+	dataSyncs, err := listDataSyncs(i.SrcDmClient, metav1.ObjectMeta{Namespace: KubemoveNamespace})
+	if err != nil {
+		return err
+	}
+	for idx := range dataSyncs.Items {
+		if dataSyncs.Items[idx].Spec.MoveEngine == i.testID {
+			err := i.SrcDmClient.Resource(dataSyncGVR).Namespace(KubemoveNamespace).Delete(dataSyncs.Items[idx].Name, &metav1.DeleteOptions{})
+			if err != nil {
+				return err
+			}
+		}
+	}
+	// Delete DataSync from destination cluster
+	dataSyncs, err = listDataSyncs(i.DstDmClient, metav1.ObjectMeta{Namespace: KubemoveNamespace})
+	if err != nil {
+		return err
+	}
+	for idx := range dataSyncs.Items {
+		if dataSyncs.Items[idx].Spec.MoveEngine == i.testID {
+			err := i.DstDmClient.Resource(dataSyncGVR).Namespace(KubemoveNamespace).Delete(dataSyncs.Items[idx].Name, &metav1.DeleteOptions{})
+			if err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}

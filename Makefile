@@ -318,7 +318,7 @@ remove-sample-es-sync:
 # Trigger INIT API
 #Example: make trigger-init
 .PHONY: trigger-init
-trigger-init:
+trigger-init: setup-envs
 	$(eval SRC_PLUGIN_NODEPORT:=$(shell (kubectl get service elasticsearch-plugin -o yaml --context=$(SRC_CONTEXT) | grep nodePort | cut -c15-)))
 	$(eval SRC_PLUGIN_ADDRESS:=$(SRC_CLUSTER_IP):$(SRC_PLUGIN_NODEPORT))
 	$(eval DST_PLUGIN_NODEPORT:=$(shell (kubectl get service elasticsearch-plugin -o yaml --context=$(DST_CONTEXT) | grep nodePort | cut -c15-)))
@@ -334,7 +334,7 @@ trigger-init:
 # Trigger SYNC API
 # Example: make trigger-sync
 .PHONY: trigger-sync
-trigger-sync:
+trigger-sync: setup-envs
 	$(eval SRC_PLUGIN_NODEPORT:=$(shell (kubectl get service elasticsearch-plugin -o yaml --context=$(SRC_CONTEXT) | grep nodePort | cut -c15-)))
 	$(eval SRC_PLUGIN_ADDRESS:=$(SRC_CLUSTER_IP):$(SRC_PLUGIN_NODEPORT))
 	$(eval DST_PLUGIN_NODEPORT:=$(shell (kubectl get service elasticsearch-plugin -o yaml --context=$(DST_CONTEXT) | grep nodePort | cut -c15-)))
@@ -353,7 +353,7 @@ ES_NAME?=sample-es
 ES_NAMESPACE=default
 INDEX_NAME?=test-index
 .PHONY: insert-index
-insert-index:
+insert-index: setup-envs
 	$(eval SRC_ES_NODEPORT:=$(shell (kubectl get service sample-es-es-http -o yaml --context=$(SRC_CONTEXT) | grep nodePort | cut -c15-)))
 	$(eval DST_ES_NODEPORT:=$(shell (kubectl get service sample-es-es-http -o yaml --context=$(DST_CONTEXT) | grep nodePort | cut -c15-)))
 
@@ -373,7 +373,7 @@ insert-index:
 # Example: make show-indexes FROM=active
 FROM?=active
 .PHONY: show-indexes
-show-indexes:
+show-indexes: setup-envs
 	$(eval SRC_ES_NODEPORT:=$(shell (kubectl get service sample-es-es-http -o yaml --context=$(SRC_CONTEXT) | grep nodePort | cut -c15-)))
 	$(eval DST_ES_NODEPORT:=$(shell (kubectl get service sample-es-es-http -o yaml --context=$(DST_CONTEXT) | grep nodePort | cut -c15-)))
 	$(eval DST_PLUGIN_ADDRESS:=$(DST_CLUSTER_IP):$(DST_PLUGIN_NODEPORT))
@@ -416,5 +416,5 @@ e2e-test:
 			$(BUILD_IMAGE)                                          \
 			/bin/bash -c "                                          \
 				KUBECONFIG=$${KUBECONFIG#$(HOME)}                   \
-				./hack/e2e-test.sh		                            \
+				./hack/e2e_test.sh		                            \
 				"

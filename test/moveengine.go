@@ -21,14 +21,22 @@ var engineGVR = schema.GroupVersionResource{
 	Resource: "moveengines",
 }
 
+const (
+	KubemoveNamespace = "kubemove"
+)
+
 func (i *Invocation) newSampleMoveEngine(es *eck.Elasticsearch) (*v1alpha1.MoveEngine, error) {
+	minioURL, err := i.getMinioServerAddress()
+	if err != nil {
+		return nil, err
+	}
 	pluginParameters := plugin.PluginParameters{
 		Repository: plugin.RepositoryOptions{
 			Name:        "minio_repo",
 			Type:        "s3",
 			Bucket:      i.testID,
 			Prefix:      "es/backup",
-			Endpoint:    i.getMinioServerAddress(),
+			Endpoint:    minioURL,
 			Scheme:      "http",
 			Credentials: "minio-credentials",
 		},
@@ -48,14 +56,18 @@ func (i *Invocation) newSampleMoveEngine(es *eck.Elasticsearch) (*v1alpha1.MoveE
 	}
 
 	return &v1alpha1.MoveEngine{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "MoveEngine",
+			APIVersion: "kubemove.io/v1alpha1",
+		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "sample-es-move",
-			Namespace: "kubemove",
+			Name:      i.testID,
+			Namespace: KubemoveNamespace,
 		},
 		Spec: v1alpha1.MoveEngineSpec{
 			MovePair:         "local",
-			Namespace:        "kubemove",
-			RemoteNamespace:  "kubemove",
+			Namespace:        KubemoveNamespace,
+			RemoteNamespace:  KubemoveNamespace,
 			SyncPeriod:       "*/3 * * * *",
 			Mode:             "active",
 			PluginProvider:   "elasticsearch-plugin",
@@ -129,4 +141,12 @@ func (i *Invocation) getMoveEngine(meta metav1.ObjectMeta) (*v1alpha1.MoveEngine
 		return nil, err
 	}
 	return engine, nil
+}
+
+func (i *Invocation) deleteMoveEngine() error {
+	err := i.SrcDmClient.Resource(engineGVR).Namespace(KubemoveNamespace).Delete(i.testID, &metav1.DeleteOptions{})
+	if err != nil {
+		return err
+	}
+	return i.DstDmClient.Resource(engineGVR).Namespace(KubemoveNamespace).Delete(i.testID, &metav1.DeleteOptions{})
 }

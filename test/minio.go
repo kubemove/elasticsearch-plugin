@@ -190,6 +190,9 @@ func createMinioDeployment(opt *util.PluginOptions, secret *corev1.Secret, pvc *
 	}
 	fmt.Println("Creating Minio Deployment in the destination cluster...")
 	_, err := opt.DstKubeClient.AppsV1().Deployments(dpl.Namespace).Create(&dpl)
+	if err != nil {
+		return err
+	}
 	return err
 }
 
@@ -222,7 +225,11 @@ func removeMinioServer(opt *util.PluginOptions) error {
 
 func (i *Invocation) EventuallyCreateMinioBucket() GomegaAsyncAssertion {
 	return Eventually(func() bool {
-		err := i.createMinioBucket()
+		err := i.addMinioConfig()
+		if err != nil {
+			return false
+		}
+		err = shell.Command("mc", "mb", fmt.Sprintf("es-repo/%s", i.testID)).Run()
 		if err != nil {
 			return false
 		}
@@ -233,24 +240,23 @@ func (i *Invocation) EventuallyCreateMinioBucket() GomegaAsyncAssertion {
 	)
 }
 
-func (i *Invocation) createMinioBucket() error {
-	sh := shell.NewSession()
-	sh.ShowCMD = true
-	args := []interface{}{"config", "host", "add", "es-repo"}
-	args = append(args, fmt.Sprintf("http://%s", i.getMinioServerAddress()))
-	args = append(args, []interface{}{MinioAccessKey, MinioSecretKey})
-	err := sh.Command("mc", args).Run()
+func (i *Invocation) addMinioConfig() error {
+	minioURL, err := i.getMinioServerAddress()
 	if err != nil {
 		return err
 	}
 
-	return sh.Command("mc", "mb", fmt.Sprintf("es-repo/%s", i.testID)).Run()
+	sh := shell.NewSession()
+	args := []interface{}{"config", "host", "add", "es-repo", fmt.Sprintf("http://%s", minioURL), MinioAccessKey, MinioSecretKey}
+
+	return sh.Command("mc", args...).Run()
 }
 
-func (i *Invocation) getMinioServerAddress() string {
+func (i *Invocation) getMinioServerAddress() (string, error) {
 	// Get Minio Service
 	svc, err := i.DstKubeClient.CoreV1().Services(DefaultNamespace).Get(Minio, metav1.GetOptions{})
-	Expect(err).NotTo(HaveOccurred())
-
-	return fmt.Sprintf("%s:%v", i.DstClusterIp, svc.Spec.Ports[0].NodePort)
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("%s:%d", i.DstClusterIp, svc.Spec.Ports[0].NodePort), nil
 }
