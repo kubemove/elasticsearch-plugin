@@ -90,5 +90,5 @@ Follow the following steps to run the E2E tests.
     make e2e-test
     ```
 
-There are also some other commands that automate many of the tasks that you  will need to do to test this plugin functionalities.
+There are some other commands that automate many of the tasks that you  will need to do to test this plugin functionalities.
 Check them on the `Makefile`.
