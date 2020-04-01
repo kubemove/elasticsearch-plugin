@@ -101,9 +101,9 @@ jobs:
         DST_CONTEXT: kind-dst-cluster
       run: |
         make deploy-eck-operator
-        sleep 20
-        kubectl wait --for=condition=READY pods elastic-operator-0 --timeout=10m --context=${SRC_CONTEXT}
-        kubectl wait --for=condition=READY pods elastic-operator-0 --timeout=10m --context=${DST_CONTEXT}
+        sleep 10
+        kubectl wait --for=condition=READY pods elastic-operator-0 -n elastic-system --timeout=10m --context=${SRC_CONTEXT}
+        kubectl wait --for=condition=READY pods elastic-operator-0 -n elastic-system --timeout=10m --context=${DST_CONTEXT}
 
     - name: Run e2e tests
       run: |
