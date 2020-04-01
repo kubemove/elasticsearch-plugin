@@ -8,7 +8,7 @@ import (
 )
 
 const (
-	DefaultTimeout       = 10 * time.Minute
+	DefaultTimeout       = 20 * time.Minute
 	DefaultRetryInterval = 2 * time.Second
 )
 
