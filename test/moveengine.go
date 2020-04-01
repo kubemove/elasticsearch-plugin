@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"k8s.io/client-go/dynamic"
+
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
@@ -93,7 +95,7 @@ func (i *Invocation) createMoveEngine(engine *v1alpha1.MoveEngine) error {
 
 func (i *Invocation) EventuallyStandbyMoveEngineCreated(meta metav1.ObjectMeta) GomegaAsyncAssertion {
 	return Eventually(func() bool {
-		_, err := i.getMoveEngine(meta)
+		_, err := getMoveEngine(i.DstDmClient, meta)
 		return err == nil
 	},
 		DefaultTimeout,
@@ -103,7 +105,7 @@ func (i *Invocation) EventuallyStandbyMoveEngineCreated(meta metav1.ObjectMeta) 
 
 func (i *Invocation) EventuallyMoveEngineReady(meta metav1.ObjectMeta) GomegaAsyncAssertion {
 	return Eventually(func() bool {
-		engine, err := i.getMoveEngine(meta)
+		engine, err := getMoveEngine(i.SrcDmClient, meta)
 		if err != nil {
 			return false
 		}
@@ -116,7 +118,7 @@ func (i *Invocation) EventuallyMoveEngineReady(meta metav1.ObjectMeta) GomegaAsy
 
 func (i *Invocation) EventuallySyncSucceeded(meta metav1.ObjectMeta) GomegaAsyncAssertion {
 	return Eventually(func() bool {
-		engine, err := i.getMoveEngine(meta)
+		engine, err := getMoveEngine(i.SrcDmClient, meta)
 		if err != nil {
 			return false
 		}
@@ -127,14 +129,14 @@ func (i *Invocation) EventuallySyncSucceeded(meta metav1.ObjectMeta) GomegaAsync
 	)
 }
 
-func (i *Invocation) getMoveEngine(meta metav1.ObjectMeta) (*v1alpha1.MoveEngine, error) {
+func getMoveEngine(dmClient dynamic.Interface, meta metav1.ObjectMeta) (*v1alpha1.MoveEngine, error) {
 	engine := &v1alpha1.MoveEngine{}
-	obj, err := i.SrcDmClient.Resource(engineGVR).Namespace(meta.Namespace).Get(meta.Name, metav1.GetOptions{})
+	obj, err := dmClient.Resource(engineGVR).Namespace(meta.Namespace).Get(meta.Name, metav1.GetOptions{})
 	if err != nil {
 		return nil, err
 	}
 
-	err = runtime.DefaultUnstructuredConverter.FromUnstructured(obj.Object, engine)
+	err = runtime.DefaultUnstructuredConverter.FromUnstructured(obj.UnstructuredContent(), engine)
 	if err != nil {
 		return nil, err
 	}
