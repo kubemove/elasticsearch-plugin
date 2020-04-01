@@ -110,4 +110,5 @@ jobs:
         docker pull docker.elastic.co/elasticsearch/elasticsearch:7.5.2
         kind load docker-image docker.elastic.co/elasticsearch/elasticsearch:7.5.2 --name=src-cluster
         kind load docker-image docker.elastic.co/elasticsearch/elasticsearch:7.5.2 --name=dst-cluster
+        sysctl -w vm.max_map_count=262144
         make e2e-test
