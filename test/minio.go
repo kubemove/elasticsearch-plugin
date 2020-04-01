@@ -3,6 +3,8 @@ package test
 import (
 	"fmt"
 
+	"k8s.io/apimachinery/pkg/api/errors"
+
 	appsv1 "k8s.io/api/apps/v1"
 
 	"github.com/appscode/go/types"
@@ -199,28 +201,32 @@ func createMinioDeployment(opt *util.PluginOptions, secret *corev1.Secret, pvc *
 func removeMinioServer(opt *util.PluginOptions) error {
 	// Delete Minio Deployment
 	err := opt.DstKubeClient.AppsV1().Deployments(DefaultNamespace).Delete(Minio, &metav1.DeleteOptions{})
-	if err != nil {
+	if err != nil && !errors.IsNotFound(err) {
 		return err
 	}
 	// Delete Minio PVC
 	err = opt.DstKubeClient.CoreV1().PersistentVolumeClaims(DefaultNamespace).Delete("minio-pvc", &metav1.DeleteOptions{})
-	if err != nil {
+	if err != nil && !errors.IsNotFound(err) {
 		return err
 	}
 
 	// Delete Minio Service
 	err = opt.DstKubeClient.CoreV1().Services(DefaultNamespace).Delete(Minio, &metav1.DeleteOptions{})
-	if err != nil {
+	if err != nil && !errors.IsNotFound(err) {
 		return err
 	}
 
 	// Delete Minio Secret from the source cluster
 	err = opt.SrcKubeClient.CoreV1().Secrets(DefaultNamespace).Delete(MinioCredentialName, &metav1.DeleteOptions{})
-	if err != nil {
+	if err != nil && !errors.IsNotFound(err) {
 		return err
 	}
 	// Delete Minio Secret from the destination cluster
-	return opt.DstKubeClient.CoreV1().Secrets(DefaultNamespace).Delete(MinioCredentialName, &metav1.DeleteOptions{})
+	err = opt.DstKubeClient.CoreV1().Secrets(DefaultNamespace).Delete(MinioCredentialName, &metav1.DeleteOptions{})
+	if err != nil && !errors.IsNotFound(err) {
+		return err
+	}
+	return nil
 }
 
 func (i *Invocation) EventuallyCreateMinioBucket() GomegaAsyncAssertion {
@@ -230,10 +236,7 @@ func (i *Invocation) EventuallyCreateMinioBucket() GomegaAsyncAssertion {
 			return false
 		}
 		err = shell.Command("mc", "mb", fmt.Sprintf("es-repo/%s", i.testID)).Run()
-		if err != nil {
-			return false
-		}
-		return true
+		return err == nil
 	},
 		DefaultTimeout,
 		DefaultRetryInterval,

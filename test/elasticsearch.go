@@ -1,16 +1,21 @@
 package test
 
 import (
+	"fmt"
+
 	eckCommon "github.com/elastic/cloud-on-k8s/pkg/apis/common/v1"
 	eck "github.com/elastic/cloud-on-k8s/pkg/apis/elasticsearch/v1"
 	"github.com/kubemove/elasticsearch-plugin/pkg/plugin"
+	"github.com/kubemove/elasticsearch-plugin/pkg/util"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/kubernetes"
 )
 
-func (i *Invocation)newDefaultElasticsearch() *eck.Elasticsearch {
+func (i *Invocation) newDefaultElasticsearch() *eck.Elasticsearch {
 	return &eck.Elasticsearch{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "Elasticsearch",
@@ -72,10 +77,35 @@ func (i *Invocation) createElasticsearch(es *eck.Elasticsearch) error {
 	return plugin.WaitUntilElasticsearchReady(i.DstKubeClient, i.DstDmClient, params, false)
 }
 
-func (i *Invocation)deleteElasticsearch() error  {
-	err:=i.SrcDmClient.Resource(plugin.ESGVR).Namespace(DefaultNamespace).Delete(i.testID,&metav1.DeleteOptions{})
-	if err!=nil{
+func (i *Invocation) deleteElasticsearch() error {
+	err := i.SrcDmClient.Resource(plugin.ESGVR).Namespace(DefaultNamespace).Delete(i.testID, &metav1.DeleteOptions{})
+	if err != nil && !errors.IsNotFound(err) {
 		return err
 	}
-	return i.DstDmClient.Resource(plugin.ESGVR).Namespace(DefaultNamespace).Delete(i.testID,&metav1.DeleteOptions{})
+	err = i.DstDmClient.Resource(plugin.ESGVR).Namespace(DefaultNamespace).Delete(i.testID, &metav1.DeleteOptions{})
+	if err != nil && !errors.IsNotFound(err) {
+		return err
+	}
+	return nil
+}
+
+func (i *Invocation) setESOptions(opt *util.PluginOptions, esMeta metav1.ObjectMeta) error {
+	var err error
+	opt.EsName = esMeta.Name
+	opt.EsNamespace = esMeta.Namespace
+	opt.SrcESNodePort, err = getESNodePort(i.SrcKubeClient, esMeta)
+	if err != nil {
+		return err
+	}
+	opt.DstESNodePort, err = getESNodePort(i.DstKubeClient, esMeta)
+	return err
+}
+
+func getESNodePort(k8sClient kubernetes.Interface, esMeta metav1.ObjectMeta) (int64, error) {
+	svc, err := k8sClient.CoreV1().Services(esMeta.Namespace).Get(fmt.Sprintf("%s-es-http", esMeta.Name), metav1.GetOptions{})
+	if err != nil {
+		return 0, err
+	}
+
+	return int64(svc.Spec.Ports[0].NodePort), nil
 }

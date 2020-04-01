@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 
+	"k8s.io/apimachinery/pkg/api/errors"
+
 	"github.com/appscode/go/crypto/rand"
 
 	"github.com/kubemove/elasticsearch-plugin/pkg/util"
@@ -42,7 +44,9 @@ var _ = BeforeSuite(func() {
 var _ = AfterSuite(func() {
 	By("Removing Minio Server")
 	err := removeMinioServer(&opt)
-	Expect(err).NotTo(HaveOccurred())
+	if !errors.IsNotFound(err) {
+		Expect(err).NotTo(HaveOccurred())
+	}
 })
 
 func TestEckPlugin(t *testing.T) {
@@ -67,8 +71,9 @@ var _ = Describe("Elasticsearch Plugin Test", func() {
 				err := i.createElasticsearch(es)
 				Expect(err).NotTo(HaveOccurred())
 
-				opt.EsName = es.Name
-				opt.EsNamespace = es.Namespace
+				err = i.setESOptions(&opt, es.ObjectMeta)
+				Expect(err).NotTo(HaveOccurred())
+
 				By("Creating a sample index in the source ES")
 				opt.IndexName = rand.WithUniqSuffix("e2e-demo")
 				err = opt.InsertIndex()
@@ -111,16 +116,22 @@ var _ = Describe("Elasticsearch Plugin Test", func() {
 
 		AfterEach(func() {
 			By("Deleting Elasticsearch.....")
-			err:=i.deleteElasticsearch()
-			Expect(err).NotTo(HaveOccurred())
+			err := i.deleteElasticsearch()
+			if !errors.IsNotFound(err) {
+				Expect(err).NotTo(HaveOccurred())
+			}
 
 			By("Deleting MoveEngine")
-			err=i.deleteMoveEngine()
-			Expect(err).NotTo(HaveOccurred())
+			err = i.deleteMoveEngine()
+			if !errors.IsNotFound(err) {
+				Expect(err).NotTo(HaveOccurred())
+			}
 
 			By("Deleting DataSync CRs......")
-			err=i.deleteDataSync()
-			Expect(err).NotTo(HaveOccurred())
+			err = i.deleteDataSync()
+			if !errors.IsNotFound(err) {
+				Expect(err).NotTo(HaveOccurred())
+			}
 
 		})
 	})

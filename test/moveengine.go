@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
 	eck "github.com/elastic/cloud-on-k8s/pkg/apis/elasticsearch/v1"
@@ -86,17 +87,14 @@ func (i *Invocation) createMoveEngine(engine *v1alpha1.MoveEngine) error {
 	}
 
 	// Create MoveEngine in the source cluster
-	_, err = i.SrcDmClient.Resource(engineGVR).Create(&unstructured.Unstructured{Object: obj}, metav1.CreateOptions{})
+	_, err = i.SrcDmClient.Resource(engineGVR).Namespace(engine.Namespace).Create(&unstructured.Unstructured{Object: obj}, metav1.CreateOptions{})
 	return err
 }
 
 func (i *Invocation) EventuallyStandbyMoveEngineCreated(meta metav1.ObjectMeta) GomegaAsyncAssertion {
 	return Eventually(func() bool {
 		_, err := i.getMoveEngine(meta)
-		if err != nil {
-			return false
-		}
-		return true
+		return err == nil
 	},
 		DefaultTimeout,
 		DefaultRetryInterval,
@@ -131,7 +129,7 @@ func (i *Invocation) EventuallySyncSucceeded(meta metav1.ObjectMeta) GomegaAsync
 
 func (i *Invocation) getMoveEngine(meta metav1.ObjectMeta) (*v1alpha1.MoveEngine, error) {
 	engine := &v1alpha1.MoveEngine{}
-	obj, err := i.DstDmClient.Resource(engineGVR).Namespace(meta.Namespace).Get(meta.Name, metav1.GetOptions{})
+	obj, err := i.SrcDmClient.Resource(engineGVR).Namespace(meta.Namespace).Get(meta.Name, metav1.GetOptions{})
 	if err != nil {
 		return nil, err
 	}
@@ -145,8 +143,12 @@ func (i *Invocation) getMoveEngine(meta metav1.ObjectMeta) (*v1alpha1.MoveEngine
 
 func (i *Invocation) deleteMoveEngine() error {
 	err := i.SrcDmClient.Resource(engineGVR).Namespace(KubemoveNamespace).Delete(i.testID, &metav1.DeleteOptions{})
-	if err != nil {
+	if err != nil && !errors.IsNotFound(err) {
 		return err
 	}
-	return i.DstDmClient.Resource(engineGVR).Namespace(KubemoveNamespace).Delete(i.testID, &metav1.DeleteOptions{})
+	err = i.DstDmClient.Resource(engineGVR).Namespace(KubemoveNamespace).Delete(i.testID, &metav1.DeleteOptions{})
+	if err != nil && !errors.IsNotFound(err) {
+		return err
+	}
+	return nil
 }

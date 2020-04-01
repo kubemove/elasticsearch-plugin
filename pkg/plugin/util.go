@@ -179,12 +179,12 @@ func extractPluginParameters(dmClient dynamic.Interface, params map[string]strin
 
 	engineName, found := params[MoveEngineName]
 	if !found {
-		return parameters, "", fmt.Errorf("failed to extract plugin's parameters. Reason: MoveEngine name not found in the paramters")
+		return parameters, "", fmt.Errorf("failed to extract plugin's parameters. Reason: MoveEngine name not found in the parameters")
 	}
 
 	engineNamespace, found := params[MoveEngineNamespace]
 	if !found {
-		return parameters, "", fmt.Errorf("failed to extract plugin's parameters. Reason: MoveEngine namespace not found in the paramters")
+		return parameters, "", fmt.Errorf("failed to extract plugin's parameters. Reason: MoveEngine namespace not found in the parameters")
 	}
 
 	// read MoveEngine CR as unstructured object using dynamic client

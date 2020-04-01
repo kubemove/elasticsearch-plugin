@@ -5,6 +5,7 @@ import (
 
 	"github.com/kubemove/kubemove/pkg/apis/kubemove/v1alpha1"
 	. "github.com/onsi/gomega"
+	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -22,8 +23,8 @@ func (i *Invocation) EventuallySourceDataSyncCreated(meta metav1.ObjectMeta) Gom
 		if err != nil {
 			return false
 		}
-		for i := range dataSyncs.Items {
-			if dataSyncs.Items[i].Spec.MoveEngine == meta.Name {
+		for i := range dataSyncs {
+			if dataSyncs[i].Spec.MoveEngine == meta.Name {
 				return true
 			}
 		}
@@ -40,8 +41,8 @@ func (i *Invocation) EventuallyDestinationDataSyncCreated(meta metav1.ObjectMeta
 		if err != nil {
 			return false
 		}
-		for i := range dataSyncs.Items {
-			if dataSyncs.Items[i].Spec.MoveEngine == meta.Name {
+		for i := range dataSyncs {
+			if dataSyncs[i].Spec.MoveEngine == meta.Name {
 				return true
 			}
 		}
@@ -51,18 +52,18 @@ func (i *Invocation) EventuallyDestinationDataSyncCreated(meta metav1.ObjectMeta
 		DefaultRetryInterval,
 	)
 }
-func listDataSyncs(dmClient dynamic.Interface, meta metav1.ObjectMeta) (*v1alpha1.DataSyncList, error) {
-	dataSyncs := &v1alpha1.DataSyncList{}
+func listDataSyncs(dmClient dynamic.Interface, meta metav1.ObjectMeta) ([]v1alpha1.DataSync, error) {
+	dataSyncs := v1alpha1.DataSyncList{}
 	obj, err := dmClient.Resource(dataSyncGVR).Namespace(meta.Namespace).List(metav1.ListOptions{})
 	if err != nil {
 		return nil, err
 	}
 
-	err = runtime.DefaultUnstructuredConverter.FromUnstructured(obj.Object, dataSyncs)
+	err = runtime.DefaultUnstructuredConverter.FromUnstructured(obj.UnstructuredContent(), &dataSyncs)
 	if err != nil {
 		return nil, err
 	}
-	return dataSyncs, nil
+	return dataSyncs.Items, nil
 }
 
 func (i *Invocation) deleteDataSync() error {
@@ -71,10 +72,10 @@ func (i *Invocation) deleteDataSync() error {
 	if err != nil {
 		return err
 	}
-	for idx := range dataSyncs.Items {
-		if dataSyncs.Items[idx].Spec.MoveEngine == i.testID {
-			err := i.SrcDmClient.Resource(dataSyncGVR).Namespace(KubemoveNamespace).Delete(dataSyncs.Items[idx].Name, &metav1.DeleteOptions{})
-			if err != nil {
+	for idx := range dataSyncs {
+		if dataSyncs[idx].Spec.MoveEngine == i.testID {
+			err := i.SrcDmClient.Resource(dataSyncGVR).Namespace(KubemoveNamespace).Delete(dataSyncs[idx].Name, &metav1.DeleteOptions{})
+			if err != nil && !errors.IsNotFound(err) {
 				return err
 			}
 		}
@@ -84,10 +85,10 @@ func (i *Invocation) deleteDataSync() error {
 	if err != nil {
 		return err
 	}
-	for idx := range dataSyncs.Items {
-		if dataSyncs.Items[idx].Spec.MoveEngine == i.testID {
-			err := i.DstDmClient.Resource(dataSyncGVR).Namespace(KubemoveNamespace).Delete(dataSyncs.Items[idx].Name, &metav1.DeleteOptions{})
-			if err != nil {
+	for idx := range dataSyncs {
+		if dataSyncs[idx].Spec.MoveEngine == i.testID {
+			err := i.DstDmClient.Resource(dataSyncGVR).Namespace(KubemoveNamespace).Delete(dataSyncs[idx].Name, &metav1.DeleteOptions{})
+			if err != nil && !errors.IsNotFound(err) {
 				return err
 			}
 		}
