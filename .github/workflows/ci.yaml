@@ -97,8 +97,8 @@ jobs:
 
     - name: Install ECK Operator
       env:
-        SRC_CONTEXT: kind-src-context
-        DST_CONTEXT: kind-dst-context
+        SRC_CONTEXT: kind-src-cluster
+        DST_CONTEXT: kind-dst-cluster
       run: |
         make deploy-eck-operator
         kubectl wait --for=condition=READY pods elastic-operator-0 --timeout=10m --context=${SRC_CONTEXT}
