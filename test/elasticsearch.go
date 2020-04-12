@@ -26,7 +26,7 @@ func (i *Invocation) newDefaultElasticsearch() *eck.Elasticsearch {
 			Namespace: "default",
 		},
 		Spec: eck.ElasticsearchSpec{
-			Version: "7.5.2",
+			Version: "7.6.2",
 			HTTP: eckCommon.HTTPConfig{
 				Service: eckCommon.ServiceTemplate{
 					Spec: corev1.ServiceSpec{
