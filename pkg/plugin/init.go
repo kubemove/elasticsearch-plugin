@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/pkg/errors"
+
 	"k8s.io/client-go/kubernetes"
 
 	"github.com/elastic/go-elasticsearch/v7/esapi"
@@ -30,17 +32,23 @@ func (d *ElasticsearchDDM) Init(params map[string]string) error {
 	// extract the plugin parameters from the respective MoveEngine
 	pluginParameters, mode, err := extractPluginParameters(d.DmClient, params)
 	if err != nil {
+		d.Log.Error(err, "failed to extract plugin parameters")
 		return err
 	}
 
 	// inject s3-repository plugin installer in the Elasticsearch
-	err = insertMinioRepository(d.K8sClient, d.DmClient, pluginParameters)
+	err = insertRepositoryPluginInstaller(d.K8sClient, d.DmClient, pluginParameters)
 	if err != nil {
+		d.Log.Error(err, "failed to insert repository plugin-installer")
 		return err
 	}
 
 	// Register Snapshot Repository in the Elasticsearch
-	return registerSnapshotRepository(d.K8sClient, pluginParameters, mode)
+	err = registerSnapshotRepository(d.K8sClient, pluginParameters, mode)
+	if err != nil {
+		d.Log.Error(err, "failed to register repository")
+	}
+	return err
 }
 
 // registerSnapshotRepository hits Snapshot API of Elasticsearch to register a repository
@@ -48,7 +56,7 @@ func registerSnapshotRepository(k8sClient kubernetes.Interface, params PluginPar
 	// crate an Elasticsearch client
 	esClient, err := NewElasticsearchClient(k8sClient, params.Elasticsearch)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "failed to get Elasticsearch client")
 	}
 
 	// configure request body
@@ -73,7 +81,7 @@ func registerSnapshotRepository(k8sClient kubernetes.Interface, params PluginPar
 
 	jsonBody, err := json.Marshal(body)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "failed to marshal RepoCreateRequestBody")
 	}
 
 	// configure snapshot repository create request
@@ -87,8 +95,7 @@ func registerSnapshotRepository(k8sClient kubernetes.Interface, params PluginPar
 	// register repository
 	resp, err := repoRequest.Do(context.Background(), esClient)
 	if err != nil {
-		fmt.Println(err.Error())
-		return err
+		return errors.Wrap(err, "failed to send SnapshotCreateRepositoryRequest")
 	}
 	defer resp.Body.Close()
 

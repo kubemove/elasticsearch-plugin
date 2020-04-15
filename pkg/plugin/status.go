@@ -8,6 +8,8 @@ import (
 	"io/ioutil"
 	"net/http"
 
+	"github.com/pkg/errors"
+
 	"k8s.io/client-go/kubernetes"
 
 	"github.com/elastic/go-elasticsearch/v7/esapi"
@@ -50,7 +52,7 @@ func (d *ElasticsearchDDM) Status(params map[string]string) (int32, error) {
 	// extract the plugin parameters from the respective MoveEngine
 	pluginParameters, mode, err := extractPluginParameters(d.DmClient, params)
 	if err != nil {
-		return framework.Errored, err
+		return framework.Errored, errors.Wrap(err, "failed to extract plugin parameters")
 	}
 
 	snapshotName, found := params[KeySnapshotName]
@@ -60,10 +62,18 @@ func (d *ElasticsearchDDM) Status(params map[string]string) (int32, error) {
 
 	// if it is active cluster, then send the backup state
 	if mode == EngineModeActive {
-		return retrieveBackupState(d.K8sClient, pluginParameters, snapshotName)
+		returnCode, err := retrieveBackupState(d.K8sClient, pluginParameters, snapshotName)
+		if err != nil {
+			d.Log.Error(err, "failed to retrieve backup state")
+		}
+		return returnCode, err
 	} else {
 		// if it is destination cluster, then send restore status
-		return retrieveRestoreState(d.K8sClient, pluginParameters, snapshotName)
+		returnCode, err := retrieveRestoreState(d.K8sClient, pluginParameters, snapshotName)
+		if err != nil {
+			d.Log.Error(err, "failed to retrieve restore state")
+		}
+		return returnCode, err
 	}
 }
 
@@ -72,7 +82,7 @@ func retrieveBackupState(k8sClient kubernetes.Interface, params PluginParameters
 	// crate an Elasticsearch client
 	esClient, err := NewElasticsearchClient(k8sClient, params.Elasticsearch)
 	if err != nil {
-		return framework.Errored, err
+		return framework.Errored, errors.Wrap(err, "failed create new Elasticsearch client")
 	}
 
 	// configure snapshot get request
@@ -86,7 +96,7 @@ func retrieveBackupState(k8sClient kubernetes.Interface, params PluginParameters
 	fmt.Println("Requesting for snapshot status.....")
 	resp, err := snapshotGetRequest.Do(context.Background(), esClient)
 	if err != nil {
-		return framework.Errored, err
+		return framework.Errored, errors.Wrap(err, "failed to send SnapshotGetRequest")
 	}
 	defer resp.Body.Close()
 
@@ -105,17 +115,16 @@ func retrieveBackupState(k8sClient kubernetes.Interface, params PluginParameters
 	var statusResponse SnapshotGetResponse
 	data, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		return framework.Errored, err
+		return framework.Errored, errors.Wrap(err, "failed to read SnapshotGetResponse")
 	}
 
-	if len(bytes.TrimSpace(data)) == 0 {
-		// Nothing to backup
-		return framework.Completed, nil // TODO: should we fail?
+	if len(bytes.TrimSpace(data)) == 0 { // The source ES does not contain any data. So, nothing to backup.
+		return framework.Completed, nil
 	}
 
 	err = json.Unmarshal(data, &statusResponse)
 	if err != nil {
-		return framework.Errored, err
+		return framework.Errored, errors.Wrap(err, "failed to unmarshal SnapshotGetResponse")
 	}
 
 	for _, s := range statusResponse.Snapshots {
@@ -140,7 +149,7 @@ func retrieveRestoreState(k8sClient kubernetes.Interface, params PluginParameter
 	// crate an Elasticsearch client
 	esClient, err := NewElasticsearchClient(k8sClient, params.Elasticsearch)
 	if err != nil {
-		return framework.Errored, err
+		return framework.Errored, errors.Wrap(err, "failed to create Elasticsearch client")
 	}
 
 	// configure indexes recovery request
@@ -153,7 +162,7 @@ func retrieveRestoreState(k8sClient kubernetes.Interface, params PluginParameter
 	fmt.Println("Requesting for recovery status........")
 	resp, err := indexRecoveryRequest.Do(context.Background(), esClient)
 	if err != nil {
-		return framework.Errored, err
+		return framework.Errored, errors.Wrap(err, "failed to send IndexRecoveryRequest")
 	}
 	defer resp.Body.Close()
 
@@ -173,17 +182,16 @@ func retrieveRestoreState(k8sClient kubernetes.Interface, params PluginParameter
 	var recoveryStats map[string]IndexesRecoveryStatus
 	data, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		return framework.Errored, err
+		return framework.Errored, errors.Wrap(err, "failed to read IndexRecoveryResponse")
 	}
 
-	if len(bytes.TrimSpace(data)) == 0 {
-		// Nothing to recover
-		return framework.Completed, nil // TODO: should we fail?
+	if len(bytes.TrimSpace(data)) == 0 { // The source ES does not contain any data. So, nothing to recover.
+		return framework.Completed, nil
 	}
 
 	err = json.Unmarshal(data, &recoveryStats)
 	if err != nil {
-		return framework.Errored, err
+		return framework.Errored, errors.Wrap(err, "failed to unmarshal IndexRecoveryResponse")
 	}
 
 	recoveryInitiated := false

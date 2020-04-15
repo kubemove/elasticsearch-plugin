@@ -135,7 +135,7 @@ func configureBasicAuth(k8sClient kubernetes.Interface, cfg *esv7.Config, opt El
 	// get the elastic user secret
 	authSecret, err := k8sClient.CoreV1().Secrets(opt.Namespace).Get(opt.AuthSecret, metav1.GetOptions{})
 	if err != nil {
-		return err
+		return errors.Wrapf(err, "failed to get the authentication secret %s/%s", opt.Namespace, opt.AuthSecret)
 	}
 
 	password, ok := authSecret.Data[ElasticUser]
@@ -153,7 +153,7 @@ func configureTLS(k8sClient kubernetes.Interface, cfg *esv7.Config, opt Elastics
 	// get the internal cert secret
 	certSecret, err := k8sClient.CoreV1().Secrets(opt.Namespace).Get(opt.TLSSecret, metav1.GetOptions{})
 	if err != nil {
-		return err
+		return errors.Wrapf(err, "failed to get the TLS secret %s/%s", opt.Namespace, opt.TLSSecret)
 	}
 
 	caCert, found := certSecret.Data[TLSCertKey]
@@ -191,14 +191,14 @@ func extractPluginParameters(dmClient dynamic.Interface, params map[string]strin
 	moveEngineGVR := v1alpha1.SchemeGroupVersion.WithResource(v1alpha1.ResourcePluralMoveEngine)
 	resp, err := dmClient.Resource(moveEngineGVR).Namespace(engineNamespace).Get(engineName, metav1.GetOptions{})
 	if err != nil {
-		return parameters, "", err
+		return parameters, "", errors.Wrapf(err, "failed to get MoveEngine %s/%s", engineNamespace, engineName)
 	}
 
 	// convert unstructured object into MoveEngine CR
 	var moveEngine v1alpha1.MoveEngine
 	err = runtime.DefaultUnstructuredConverter.FromUnstructured(resp.UnstructuredContent(), &moveEngine)
 	if err != nil {
-		return parameters, "", err
+		return parameters, "", errors.Wrap(err, "failed to convert unstructured object into MoveEngine CR")
 	}
 
 	if moveEngine.Spec.PluginParameters != nil {
@@ -216,21 +216,21 @@ func parseErrorCause(body io.ReadCloser) (*RootCause, error) {
 	var errorInfo ErrorInfo
 	data, err := ioutil.ReadAll(body)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "failed to read response body")
 	}
 
 	err = json.Unmarshal(data, &errorInfo)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "failed to unmarshal response body")
 	}
 	return &errorInfo.Error.RootCause[0], nil
 }
 
-// insertMinioRepository patches both source and destination Elasticsearches and inject s3-repository plugin installer init-container
-func insertMinioRepository(k8sClient kubernetes.Interface, dmClient dynamic.Interface, params PluginParameters) error {
+// insertRepositoryPluginInstaller patches both source and destination Elasticsearches and inject s3-repository plugin installer init-container
+func insertRepositoryPluginInstaller(k8sClient kubernetes.Interface, dmClient dynamic.Interface, params PluginParameters) error {
 	es, err := getElasticsearch(dmClient, params)
 	if err != nil {
-		return err
+		return errors.Wrapf(err, "failed to get Elasticsearch CR %s/%s", params.Elasticsearch.Namespace, params.Elasticsearch.Name)
 	}
 
 	// insert plugin installer init-container
@@ -265,7 +265,7 @@ func insertMinioRepository(k8sClient kubernetes.Interface, dmClient dynamic.Inte
 	// update Elasticsearch
 	_, err = dmClient.Resource(ESGVR).Namespace(params.Elasticsearch.Namespace).Update(&unstructured.Unstructured{Object: updatedES}, metav1.UpdateOptions{})
 	if err != nil {
-		return err
+		return errors.Wrapf(err, "failed to update Elasticsearch CR %s/%s", params.Elasticsearch.Namespace, params.Elasticsearch.Name)
 	}
 
 	// wait for ES to be ready with the plugin installer
@@ -280,6 +280,7 @@ func WaitUntilElasticsearchReady(k8sClient kubernetes.Interface, dmClient dynami
 			return true, err
 		}
 		if es.Status.Phase != eck.ElasticsearchReadyPhase {
+			fmt.Println("Waiting for Elaticsearch to be ready .......")
 			return false, nil
 		}
 
@@ -312,7 +313,7 @@ func checkPatchState(k8sClient kubernetes.Interface, es *eck.Elasticsearch) (boo
 	// Identify the respective StatefulSets
 	sts, err := k8sClient.AppsV1().StatefulSets(es.Namespace).List(metav1.ListOptions{})
 	if err != nil {
-		return false, err
+		return false, errors.Wrapf(err, "failed to list the StatefulSets of the Elasticsearch %s/%s", es.Namespace, es.Name)
 	}
 	if len(sts.Items) == 0 {
 		return false, fmt.Errorf("no StatefulSet found for Elasticsearch %s/%s", es.Namespace, es.Name)

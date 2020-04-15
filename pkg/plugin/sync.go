@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/pkg/errors"
+
 	"k8s.io/client-go/kubernetes"
 
 	"github.com/elastic/go-elasticsearch/v7/esapi"
@@ -15,6 +17,7 @@ func (d *ElasticsearchDDM) Sync(params map[string]string) (string, error) {
 	// extract the plugin parameters from the respective MoveEngine
 	pluginParameters, mode, err := extractPluginParameters(d.DmClient, params)
 	if err != nil {
+		d.Log.Error(err, "failed to extract plugin parameters")
 		return "", err
 	}
 
@@ -26,20 +29,29 @@ func (d *ElasticsearchDDM) Sync(params map[string]string) (string, error) {
 	// if it is source cluster, then trigger a snapshot
 	if mode == EngineModeActive {
 		fmt.Println("Triggering Snapshot: ", snapshotName)
-		return triggerSnapshot(d.K8sClient, pluginParameters, snapshotName)
+		res, err := triggerSnapshot(d.K8sClient, pluginParameters, snapshotName)
+		if err != nil {
+			d.Log.Error(err, "failed to trigger snapshot process")
+		}
+		return res, err
 	} else {
 		fmt.Println("Triggering Restore from Snapshot: ", snapshotName)
 		// if it is destination cluster, then trigger a restore
-		return triggerRestore(d.K8sClient, pluginParameters, snapshotName)
+		res, err := triggerRestore(d.K8sClient, pluginParameters, snapshotName)
+		if err != nil {
+			d.Log.Error(err, "failed to trigger restore process")
+		}
+		return res, err
 	}
 }
 
 // triggerSnapshot hits the Snapshot API of Elasticsearch to trigger a snapshot
+// nolint: unparam
 func triggerSnapshot(k8sClient kubernetes.Interface, params PluginParameters, snapshotName string) (string, error) {
 	// crate an Elasticsearch client
 	esClient, err := NewElasticsearchClient(k8sClient, params.Elasticsearch)
 	if err != nil {
-		return "", err
+		return "", errors.Wrap(err, "failed to crate Elasticsearch client")
 	}
 
 	// configure snapshot create request
@@ -52,7 +64,7 @@ func triggerSnapshot(k8sClient kubernetes.Interface, params PluginParameters, sn
 	// create snapshot
 	resp, err := snapshotRequest.Do(context.Background(), esClient)
 	if err != nil {
-		return "", err
+		return "", errors.Wrap(err, "failed to send SnapshotCreateRequest")
 	}
 	defer resp.Body.Close()
 
@@ -72,11 +84,12 @@ func triggerSnapshot(k8sClient kubernetes.Interface, params PluginParameters, sn
 }
 
 // triggerRestore hits the Recovery API of Elasticsearch to trigger a restore process
+// nolint: unparam
 func triggerRestore(k8sClient kubernetes.Interface, params PluginParameters, snapshotName string) (string, error) {
 	// crate an Elasticsearch client
 	esClient, err := NewElasticsearchClient(k8sClient, params.Elasticsearch)
 	if err != nil {
-		return "", err
+		return "", errors.Wrap(err, "failed to create Elasticsearch client")
 	}
 
 	// close all indexes
@@ -87,7 +100,7 @@ func triggerRestore(k8sClient kubernetes.Interface, params PluginParameters, sna
 	}
 	closeResp, err := closeRequest.Do(context.Background(), esClient)
 	if err != nil {
-		return "", err
+		return "", errors.Wrap(err, "failed to send IndiciesCloseRequest")
 	}
 	defer closeResp.Body.Close()
 
@@ -102,7 +115,7 @@ func triggerRestore(k8sClient kubernetes.Interface, params PluginParameters, sna
 	}
 	resp, err := restoreRequest.Do(context.Background(), esClient)
 	if err != nil {
-		return "", err
+		return "", errors.Wrap(err, "failed to send SnapshotRestoreRequest")
 	}
 	defer resp.Body.Close()
 

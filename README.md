@@ -4,7 +4,13 @@ This is a plugin for [Kubemove](https://github.com/kubemove/kubemove) to sync da
 
 ## Pre-requisite
 
-You must install [Kubemove](https://github.com/kubemove/kubemove) installed before installing this plugin.  In order to install Kubemove framework, please for the guide [here](https://github.com/kubemove/kubemove#deploy-kubemove).
+You must install [Kubemove](https://github.com/kubemove/kubemove) before installing this plugin.  In order to install Kubemove framework, please for the guide [here](https://github.com/kubemove/kubemove#deploy-kubemove).
+
+## Supported Repositories
+
+Currently, Elasticsearch plugin supports the following repositories,
+
+- [S3 / S3 Compatible Services (i.e. Minio)](https://www.elastic.co/guide/en/elasticsearch/plugins/7.6/repository-s3.html)
 
 ## Install Plugin
 
