@@ -1,0 +1,36 @@
+apiVersion: kubemove.io/v1alpha1
+kind: MovePair
+metadata:
+  name: local
+  namespace: kubemove
+spec:
+  config:
+    clusters:
+    - cluster:
+        certificate-authority-data: LS0tLS1CRUdJT....0KLS0tLS1FTkQgQ0VSVElGSUNBVEUtLS0tLQo=
+        server: https://172.17.0.2:6443
+      name: kind-src-cluster
+    - cluster:
+        certificate-authority-data: LS0tLS1CRUd....gQ0VSVElGSUNBVEUtLS0tLQo=
+        server: https://172.17.0.3:6443
+      name: kind-dst-cluster
+    contexts:
+    - context:
+        cluster: kind-src-cluster
+        user: kind-src-cluster
+      name: kind-src-cluster
+    - context:
+        cluster: kind-dst-cluster
+        user: kind-dst-cluster
+      name: kind-dst-cluster
+    current-context: kind-dst-cluster
+    preferences: {}
+    users:
+    - name: kind-src-cluster
+      user:
+        client-certificate-data: LS0tLS1CRUdJTiBDRV....VElGSUNBVEUtLS0tLQo=
+        client-key-data: LS0tLS1CRUdJTiBSU....kFURSBLRVktLS0tLQo=
+    - name: kind-dst-cluster
+      user:
+        client-certificate-data: LS0tLS1CRUdJTiB....SVElGSUNBVEUtLS0tLQo=
+        client-key-data: LS0tLS1CRUdJTiBSU....RSBLRVktLS0tLQo=

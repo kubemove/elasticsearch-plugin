@@ -1,0 +1,33 @@
+syntax = "proto3";
+package proto;
+
+service DataSyncer {
+  rpc Init(InitRequest) returns (InitResponse);
+
+  rpc SyncData(SyncRequest) returns (SyncResponse);
+
+  rpc SyncStatus(SyncStatusRequest) returns (SyncStatusResponse);
+}
+
+message InitRequest {
+    map <string, string> params = 1;
+}
+
+message InitResponse {
+}
+
+message SyncRequest {
+   map <string, string> params = 1;
+}
+
+message SyncResponse {
+  string syncID = 1;
+}
+
+message SyncStatusRequest {
+  map <string,string> params = 1;
+}
+
+message SyncStatusResponse {
+  int32 status = 1;
+}

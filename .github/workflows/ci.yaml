@@ -1,0 +1,114 @@
+name: CI
+
+on:
+  push:
+    branches-ignore:
+    - 'release-*'
+    tags-ignore:
+    - '*.*'
+
+jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    steps:
+
+    - name: Set up Go 1.13
+      uses: actions/setup-go@v1.1.2
+      with:
+        go-version: 1.13
+      id: go
+
+    - name: Checkout into Kubemove repository
+      uses: actions/checkout@v2
+      with:
+        repository: kubemove/kubemove
+
+    - name: Make developer image
+      run: |
+        make dev-image
+
+    - name: Checkout into the current commit
+      uses: actions/checkout@v2
+
+#    - name: Setup Docker Registry
+#      env:
+#        REGISTRY: kubemove
+#        DOCKER_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+#        USERNAME: kubemove
+#      run: |
+#        docker login --username ${USERNAME} --password ${DOCKER_TOKEN}
+
+    - name: Run checks
+      run: |
+        make lint
+
+    - name: Build
+      run: |
+        make build
+#        make plugin-image
+#        make deploy-images
+
+  test:
+    name: E2E Test
+    runs-on: ubuntu-latest
+    steps:
+
+    - name: Create source cluster
+      id: kind-src-cluster
+      uses: engineerd/setup-kind@v0.3.0
+      with:
+        name: src-cluster
+
+    - name: Create destinaion cluster
+      id: kind-dst-cluster
+      uses: engineerd/setup-kind@v0.3.0
+      with:
+        name: dst-cluster
+
+#    - name: Setup Docker Registry
+#      env:
+#        REGISTRY: kubemove
+#        DOCKER_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+#        USERNAME: kubemove
+#      run: |
+#        docker login --username ${USERNAME} --password ${DOCKER_TOKEN}
+
+    - name: Checkout into Kubemove repository
+      uses: actions/checkout@v2
+      with:
+        repository: kubemove/kubemove
+
+    - name: Install Kubemove
+      run: |
+        make dev-image
+        make deploy_kubemove
+        make create_local_mp
+
+    - name: Checkout into the current commit
+      uses: actions/checkout@v2
+
+    - name: Install plugin
+      run: |
+        make plugin-image
+        kind load docker-image $(docker images | grep elasticsearch-plugin | awk '{print $3}') --name=src-cluster
+        kind load docker-image $(docker images | grep elasticsearch-plugin | awk '{print $3}') --name=dst-cluster
+        make install-plugin
+
+    - name: Install ECK Operator
+      env:
+        SRC_CONTEXT: kind-src-cluster
+        DST_CONTEXT: kind-dst-cluster
+      run: |
+        make deploy-eck-operator
+        sleep 10
+        kubectl wait --for=condition=READY pods elastic-operator-0 -n elastic-system --timeout=10m --context=${SRC_CONTEXT}
+        kubectl wait --for=condition=READY pods elastic-operator-0 -n elastic-system --timeout=10m --context=${DST_CONTEXT}
+
+    - name: Run e2e tests
+      run: |
+        docker pull docker.elastic.co/elasticsearch/elasticsearch:7.5.2
+        kind load docker-image docker.elastic.co/elasticsearch/elasticsearch:7.5.2 --name=src-cluster
+        kind load docker-image docker.elastic.co/elasticsearch/elasticsearch:7.5.2 --name=dst-cluster
+        sudo sysctl -w vm.max_map_count=262144
+        make e2e-test
